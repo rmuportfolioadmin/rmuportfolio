@@ -1,0 +1,127 @@
+/* Gallery Page Styles -------------------------------------------------------
+   Lightweight styles for portfolio index (cards + search). Uses CSS variables
+   similar to existing design system; falls back gracefully if portfolio.css
+   not yet loaded. */
+/* Rawalpindi Medical University (RMU) Color System
+   Derived palette (estimated from logo description):
+   Maroon (outer ring / primary): #6e1c17
+   Deep Maroon (hover/dark): #55120f
+   Gold-Beige (inner text / accent): #d4b071
+   Pale Gold (hover accent): #e2c489
+   Light Background (parchment feel): #f8f4ec
+   Subtle Border Neutral: #d8c9b4
+   Muted Text: #6d5b47
+   Body Text: #39251b
+   Accent Red (medical staff): #b1171f (limited use)
+*/
+:root {
+  --gal-bg: #f8f4ec;
+  --gal-fg: #39251b;
+  --gal-muted: #6d5b47;
+  --gal-border: #d8c9b4;
+  --gal-accent: #6e1c17;        /* primary maroon */
+  --gal-accent-alt: #d4b071;    /* gold beige */
+  --gal-accent-alt-hover: #e2c489;
+  --gal-accent-dark: #55120f;
+  --gal-radius: 14px;
+  --gal-card-bg: #ffffff;
+  --gal-shadow: 0 4px 10px -4px rgba(90,28,23,0.25),0 1px 4px rgba(0,0,0,0.08);
+  --gal-focus: 0 0 0 3px rgba(212,176,113,0.55);
+  --gal-gradient-header: linear-gradient(135deg,#6e1c17 0%,#55120f 55%,#6e1c17 100%);
+  --gal-gradient-text: linear-gradient(90deg,#e2c489,#d4b071 45%,#e2c489 90%);
+}
+
+html,body { margin:0; padding:0; background:var(--gal-bg); color:var(--gal-fg); -webkit-font-smoothing:antialiased; }
+
+.gal-container { width:100%; max-width:1200px; margin:0 auto; padding:0 1.25rem; }
+
+.gal-header { background:var(--gal-gradient-header); border-bottom:3px solid var(--gal-accent-alt); position:sticky; top:0; z-index:10; box-shadow:0 6px 18px -8px rgba(0,0,0,0.4); }
+.gal-header-inner { display:flex; gap:1.25rem; align-items:center; padding:0.75rem 0 0.7rem; flex-wrap:wrap; }
+.gal-title { margin:0; font-size:1.45rem; letter-spacing:.6px; background:var(--gal-gradient-text); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:700; text-shadow:0 0 0 rgba(0,0,0,0.4); position:relative; }
+.gal-title small { display:block; font-size:.6rem; letter-spacing:2px; font-weight:600; margin-top:2px; color:var(--gal-accent-alt); text-shadow:none; }
+
+/* RMU brand block */
+.rmu-brand { display:flex; align-items:center; gap:.9rem; min-width:260px; }
+.rmu-brand img { width:54px; height:54px; object-fit:contain; filter:drop-shadow(0 3px 6px rgba(0,0,0,0.35)); border-radius:50%; background:#fff; padding:4px; border:2px solid var(--gal-accent-alt); }
+.rmu-brand .rmu-text { display:flex; flex-direction:column; line-height:1.1; }
+.rmu-brand .rmu-university { font-size:.72rem; letter-spacing:1.6px; font-weight:600; color:var(--gal-accent-alt); text-transform:uppercase; }
+.rmu-brand .rmu-sub { font-size:.58rem; letter-spacing:1.5px; font-weight:500; margin-top:2px; color:var(--gal-accent-alt-hover); text-transform:uppercase; }
+
+.gal-search-wrapper { margin-left:auto; position:relative; }
+#scan-toggle { cursor:pointer; }
+#search-box { font:inherit; padding:.65rem .95rem; width:240px; border:1px solid var(--gal-border); border-radius:999px; background:#fff; color:var(--gal-fg); box-shadow:0 2px 4px rgba(0,0,0,0.08); transition:.25s; }
+#search-box:focus { outline:none; border-color:var(--gal-accent-alt); box-shadow:var(--gal-focus); }
+#search-box::placeholder { color:var(--gal-muted); }
+@media (max-width:620px){ #search-box { width:100%; } .gal-search-wrapper { flex:1 0 100%; } .gal-header-inner{flex-direction:column;align-items:stretch;} .gal-title { align-self:flex-start; } }
+
+.gal-main { padding:1.25rem 0 3rem; }
+.gal-status { font-size:.9rem; color:var(--gal-muted); margin:.5rem 0 1rem; }
+
+/* Grid now acts as a flex column in list mode */
+.gal-grid { display:flex; flex-direction:column; gap:.55rem; }
+.gal-grid.list-mode { gap:.55rem; }
+
+/* Modern list row style */
+.gal-row { display:grid; grid-template-columns: minmax(120px,180px) 1fr minmax(70px,140px); align-items:center; gap:1rem; padding:.9rem 1.05rem; background:linear-gradient(180deg,#ffffff 0%,#fdfaf6 90%); border:1px solid var(--gal-border); border-radius:14px; text-decoration:none; color:inherit; box-shadow:var(--gal-shadow); position:relative; transition:background .28s,border-color .28s, box-shadow .28s; font-size:.8rem; }
+.gal-row:hover { background:linear-gradient(180deg,#fff 0%,#fbf1df 95%); border-color:var(--gal-accent-alt); box-shadow:0 6px 14px -6px rgba(110,28,23,0.35),0 0 0 1px rgba(212,176,113,0.4); }
+.gal-row:focus { outline:none; }
+.gal-row:focus-visible { box-shadow:0 0 0 3px rgba(43,121,255,0.5); }
+.gal-row .row-file { font-weight:600; font-size:.7rem; letter-spacing:.65px; text-transform:uppercase; color:var(--gal-accent-alt); opacity:.95; }
+.gal-row .row-name { font-size:.95rem; font-weight:600; color:#3b271f; margin-top:2px; }
+.gal-row .row-summary { font-size:.72rem; color:var(--gal-muted); line-height:1.2; max-height:3em; overflow:hidden; position:relative; }
+.gal-row .row-summary:after { content:""; position:absolute; inset:auto 0 0 0; height:1.1em; background:linear-gradient(180deg,rgba(255,255,255,0),#fff 75%); }
+.gal-row .row-meta { font-size:.63rem; font-weight:600; letter-spacing:.55px; color:#715a46; text-align:right; }
+@media (max-width:640px){ .gal-row { grid-template-columns:1fr minmax(70px,120px); grid-template-areas:"main meta"; }
+  .gal-row .row-left { grid-area: main; }
+  .gal-row .row-summary { display:none; }
+  .gal-row .row-meta { grid-area: meta; }
+  .gal-row .row-file { font-size:.6rem; }
+}
+
+/* Thumbnail styles removed (legacy kept commented for reference)
+ .gal-thumb-wrapper{display:none}
+*/
+
+.gal-meta { display:flex; flex-direction:column; gap:.35rem; line-height:1.25; }
+.gal-name { font-size:.95rem; font-weight:600; letter-spacing:.3px; color:#123; margin:0; }
+.gal-roll { font-size:.7rem; font-weight:500; text-transform:uppercase; letter-spacing:.8px; color:var(--gal-accent-alt); margin:0; }
+.gal-summary { font-size:.72rem; color:var(--gal-muted); margin:0; max-height:3.2em; overflow:hidden; position:relative; }
+.gal-summary:after { content:""; position:absolute; bottom:0; left:0; right:0; height:1.3em; background:linear-gradient(180deg,rgba(255,255,255,0),#fff 70%); }
+
+.gal-empty { padding:2.5rem 1rem; text-align:center; border:2px dashed var(--gal-border); border-radius:18px; background:linear-gradient(180deg,#ffffff 0%,#f8f3e9 100%); color:var(--gal-muted); }
+.gal-empty strong { display:block; font-size:1rem; margin-bottom:.4rem; color:var(--gal-fg); }
+
+.gal-footer { border-top:2px solid var(--gal-accent-alt); padding:1.4rem 0 2rem; background:linear-gradient(180deg,#6e1c17 0%,#55120f 95%); margin-top:2.2rem; font-size:.72rem; color:var(--gal-accent-alt); text-align:center; position:relative; }
+.gal-footer:before { content:''; position:absolute; inset:0; background:radial-gradient(circle at 50% 15%, rgba(226,196,137,0.25), transparent 70%); opacity:.65; pointer-events:none; }
+
+/* Decorative subtle parchment texture (pure CSS layering) */
+body {
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(212,176,113,0.12), transparent 55%),
+    radial-gradient(circle at 82% 12%, rgba(110,28,23,0.10), transparent 60%),
+    radial-gradient(circle at 50% 85%, rgba(212,176,113,0.10), transparent 65%);
+  background-attachment:fixed;
+}
+
+/* Improve focus ring contrast on maroon background */
+.gal-row:focus-visible { box-shadow:0 0 0 3px rgba(212,176,113,0.65),0 0 0 1px #fff; }
+
+/* Responsive tweaks for brand area */
+@media (max-width:760px){
+  .rmu-brand { width:100%; }
+  .rmu-brand img { width:46px; height:46px; }
+  .gal-header-inner { justify-content:flex-start; }
+}
+
+/* Fade-in animation */
+@keyframes galFadeIn { from { opacity:0; transform:translateY(6px);} to { opacity:1; transform:translateY(0);} }
+.gal-row { animation:galFadeIn .35s cubic-bezier(.35,.65,.35,1) both; }
+
+/* Respect user preference to reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .gal-row { animation:none; }
+  * { transition:none !important; }
+}
+
+/* Utility hidden */
+.hidden { display:none !important; }
