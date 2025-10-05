@@ -175,6 +175,21 @@
     })();
     </script>
     <script>
+    // Roll number format validation (defined early for global access)
+    function isValidRollNoFormat(rollNo) {
+        console.log('[RollNo] Validating roll number:', rollNo);
+        if (!rollNo || typeof rollNo !== 'string') {
+            console.log('[RollNo] Invalid input - not a string or empty');
+            return false;
+        }
+        // Format: XXX-RXX-X (3 digits, R + 2 digits, 1 letter)
+        const rollNoPattern = /^\d{3}-R\d{2}-[A-Z]$/;
+        const normalizedInput = rollNo.trim().toUpperCase();
+        const isValid = rollNoPattern.test(normalizedInput);
+        console.log('[RollNo] Validation result:', isValid, 'for normalized input:', normalizedInput);
+        return isValid;
+    }
+
     // Query param portfolio JSON loader shim (enhanced for reliability).
     // If ?file=... is provided, we fetch that JSON early and store it in window.__PRELOADED_PORTFOLIO_DATA
     // so existing PortfolioApp logic can later choose to adopt it.
@@ -1375,20 +1390,7 @@ window.addEventListener('load', () => {
     
     console.log('[RollNo] Initializing roll number validation system');
     
-    // Roll number format validation
-    function isValidRollNoFormat(rollNo) {
-        console.log('[RollNo] Validating roll number:', rollNo);
-        if (!rollNo || typeof rollNo !== 'string') {
-            console.log('[RollNo] Invalid input - not a string or empty');
-            return false;
-        }
-        // Format: XXX-RXX-X (3 digits, R + 2 digits, 1 letter)
-        const rollNoPattern = /^\d{3}-R\d{2}-[A-Z]$/;
-        const normalizedInput = rollNo.trim().toUpperCase();
-        const isValid = rollNoPattern.test(normalizedInput);
-        console.log('[RollNo] Validation result:', isValid, 'for normalized input:', normalizedInput);
-        return isValid;
-    }
+    // Roll number format validation (function already defined globally above)
     
     // Show roll number format guide popup
     function showRollNoGuide() {
