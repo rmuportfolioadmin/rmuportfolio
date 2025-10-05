@@ -60,8 +60,24 @@
   }
 
   function getCurrentUserEmail(){
-    console.log('[Auth] Getting current user email, cached:', currentUserEmail);
+    // Only log if debugging is enabled to reduce console spam
+    if (window.DEBUG_AUTH || window.RMU_CONFIG?.DEBUG_MODE) {
+      console.log('[Auth] Getting current user email, cached:', currentUserEmail);
+    }
     return currentUserEmail || '';
+  }
+
+  // Add rate limiting to prevent excessive auth calls
+  let lastAuthCall = 0;
+  const AUTH_CALL_COOLDOWN = 1000; // 1 second
+  
+  function shouldAllowAuthCall() {
+    const now = Date.now();
+    if (now - lastAuthCall < AUTH_CALL_COOLDOWN) {
+      return false;
+    }
+    lastAuthCall = now;
+    return true;
   }
 
   function setCurrentUserEmail(email) {
@@ -76,8 +92,13 @@
     return admin;
   }
 
-  // Modern authentication method using Google Identity Services
+  // Modern authentication method using Google Identity Services with rate limiting
   async function authenticateUser() {
+    if (!shouldAllowAuthCall()) {
+      console.log('[Auth] Rate limited - authentication call too frequent');
+      throw new Error('Authentication rate limited. Please wait before trying again.');
+    }
+    
     console.log('[Auth] Starting modern authentication...');
     
     try {
@@ -97,22 +118,29 @@
             console.log('[Auth] Got access token, fetching user info...');
             currentToken = tokenResponse.access_token;
             
-            // Get user info
+            // Get user info with timeout
             try {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+              
               const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-                headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` }
+                headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` },
+                signal: controller.signal
               });
+              
+              clearTimeout(timeout);
               
               if (userInfoResponse.ok) {
                 const userInfo = await userInfoResponse.json();
                 setCurrentUserEmail(userInfo.email);
                 console.log('[Auth] User authenticated:', userInfo.email);
-                resolve({ token: tokenResponse.access_token, email: userInfo.email });
+                resolve({ token: tokenResponse.access_token, email: userInfo.email, userInfo });
               } else {
-                reject(new Error('Failed to get user info'));
+                reject(new Error(`Failed to get user info: ${userInfoResponse.status}`));
               }
             } catch (err) {
-              reject(err);
+              console.error('[Auth] User info fetch error:', err);
+              reject(new Error(`User info fetch failed: ${err.message}`));
             }
           }
         });
