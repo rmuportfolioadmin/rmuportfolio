@@ -231,9 +231,29 @@
         // Fetch the specific portfolio file with aggressive cache-busting
         const cacheBuster = Date.now();
         const fileUrl = file.includes('?') ? `${file}&cb=${cacheBuster}` : `${file}?cb=${cacheBuster}`;
+        
+        // Add overall timeout to prevent infinite loading
+        const overallTimeout = setTimeout(() => {
+            console.error('[portfolio-loader] Overall timeout reached - falling back to default portfolio');
+            const pre = document.getElementById('preload-status');
+            if (pre) {
+                pre.textContent = 'File not found - Loading default portfolio...';
+                pre.style.background = '#fff4e6';
+            }
+            // Redirect to default portfolio after 2 seconds
+            setTimeout(() => {
+                window.location.href = 'portfolio.html?file=portfolio-data.json';
+            }, 2000);
+        }, 15000); // 15 second overall timeout
+        
         (function fetchWithRetry(url, attempt=1){
+            // Add fetch timeout
+            const controller = new AbortController();
+            const fetchTimeout = setTimeout(() => controller.abort(), 8000); // 8 second per-request timeout
+            
             fetch(url, {
                 cache:'no-store',
+                signal: controller.signal,
                 headers: {
                     'Cache-Control': 'no-cache, no-store, must-revalidate',
                     'Pragma': 'no-cache',
@@ -241,6 +261,8 @@
                 }
             })
             .then(r=>{ 
+                clearTimeout(fetchTimeout);
+                clearTimeout(overallTimeout); // Clear overall timeout on success
                 console.log('[portfolio-loader] Fetch response:', r.status, r.ok, 'attempt', attempt);
                 if(!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
                 return r.json();
@@ -258,20 +280,43 @@
                 // don't remove until adoption done; adoption will remove
             })
             .catch(err => { 
+                clearTimeout(fetchTimeout);
                 console.error('[portfolio-loader] Failed to load portfolio file attempt', attempt, err);
-                if (attempt < 3) {
+                
+                // Handle specific error cases
+                const is404 = err.message.includes('404') || err.message.includes('Not Found');
+                const isTimeout = err.name === 'AbortError';
+                
+                if (attempt < 3 && !is404) {
                     const delay = 300 * attempt;
                     pre.textContent = `Retrying (${attempt})...`;
                     setTimeout(()=>fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`, attempt+1), delay);
                 } else {
-                    pre.textContent = `Failed to load ${file.replace('data/','')}`;
-                    pre.style.background = '#ffe6e6';
-                    // Offer manual retry button
-                    const btn = document.createElement('button');
-                    btn.textContent = 'Retry';
-                    btn.style.cssText='margin-left:12px;padding:4px 10px;font-size:12px;border:1px solid #c33;background:#b22222;color:#fff;border-radius:6px;cursor:pointer;';
-                    btn.onclick=()=>{ btn.disabled=true; pre.textContent='Retrying...'; fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`,1); };
-                    pre.appendChild(btn);
+                    clearTimeout(overallTimeout); // Clear overall timeout since we're handling the error
+                    
+                    if (is404) {
+                        pre.textContent = `File not found - Redirecting to default portfolio...`;
+                        pre.style.background = '#fff4e6';
+                        setTimeout(() => {
+                            window.location.href = 'portfolio.html?file=portfolio-data.json';
+                        }, 2000);
+                    } else {
+                        pre.textContent = `Failed to load ${file.replace('data/','')}`;
+                        pre.style.background = '#ffe6e6';
+                        // Offer manual retry and fallback buttons
+                        const retryBtn = document.createElement('button');
+                        retryBtn.textContent = 'Retry';
+                        retryBtn.style.cssText='margin-left:8px;padding:4px 10px;font-size:12px;border:1px solid #c33;background:#b22222;color:#fff;border-radius:6px;cursor:pointer;';
+                        retryBtn.onclick=()=>{ retryBtn.disabled=true; pre.textContent='Retrying...'; fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`,1); };
+                        
+                        const fallbackBtn = document.createElement('button');
+                        fallbackBtn.textContent = 'Use Default';
+                        fallbackBtn.style.cssText='margin-left:8px;padding:4px 10px;font-size:12px;border:1px solid #06c;background:#0066cc;color:#fff;border-radius:6px;cursor:pointer;';
+                        fallbackBtn.onclick=()=>{ window.location.href = 'portfolio.html?file=portfolio-data.json'; };
+                        
+                        pre.appendChild(retryBtn);
+                        pre.appendChild(fallbackBtn);
+                    }
                 }
             });
         })(fileUrl,1);
