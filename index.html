@@ -306,7 +306,7 @@
         }
         
         // Check if admin or regular user
-        if(email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+        if(currentUserEmail?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
           // VC/Admin user - show loading and enable admin mode with backend integration
           console.log('[Auth] VC email detected - activating admin mode with backend integration');
           setStatus('VC authenticated - Initializing gallery...');
@@ -330,7 +330,7 @@
           showWelcomeOverlay(false);
           blurPortfolio(false);
           hideGalleryNavigation(true);
-          loadUserPortfolioFromDrive(email, adminToken);
+          loadUserPortfolioFromDrive(currentUserEmail, adminToken);
         }
         
         showWelcomeLoading(false);
