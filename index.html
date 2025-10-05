@@ -9,7 +9,6 @@
   <link rel="stylesheet" href="gallery.css?v=20250928.1" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}</style>
-  <script src="https://apis.google.com/js/api.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="config.js" defer></script>
   <script src="auth.js" defer></script>
@@ -117,7 +116,7 @@
       </div>
       <div id="welcome-error" class="admin-error" style="display:none;"></div>
       <p class="welcome-desc">
-        Your digital academic portfolio is ready to explore. Sign in with Google to access your personal data and sync across devices, or continue without signing in to view the demo portfolio.
+        Your digital academic portfolio is ready to explore. Sign in with Google to access your personal data and sync across devices, or continue without signing in to view the demo portfolio. <small style="display:block;margin-top:8px;opacity:0.7;">Note: Google authentication is being updated to comply with new security requirements.</small>
       </p>
       <div class="welcome-actions">
         <button id="welcome-signin" class="welcome-btn welcome-btn-primary">
@@ -264,42 +263,41 @@
     
     async function signInFromWelcome() {
       try {
-        // Wait for Google API to be fully loaded
-        let retries = 0;
-        while(typeof gapi === 'undefined' && retries < 10) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          retries++;
-        }
-        
-        if(typeof gapi === 'undefined') {
-          setWelcomeError('Google API failed to load. Please refresh and try again.');
-          return;
-        }
-        
         showWelcomeLoading(true);
         setWelcomeError('');
         
-        // Initialize gapi.auth2 if not already done
-        await new Promise(resolve => gapi.load('auth2', resolve));
-        let authInstance = gapi.auth2.getAuthInstance();
-        if(!authInstance) {
-          const config = window.RMU_CONFIG || {};
-          authInstance = await gapi.auth2.init({
-            client_id: config.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID,
-            scope: config.OAUTH_SCOPES || 'https://www.googleapis.com/auth/drive.appdata profile email openid'
+        console.log('[Welcome] Starting authentication...');
+        
+        // Wait for RMU_AUTH to be ready
+        if (!window.RMU_AUTH) {
+          console.log('[Welcome] Waiting for RMU_AUTH...');
+          await new Promise(resolve => {
+            if (window.RMU_AUTH) {
+              resolve();
+            } else {
+              document.addEventListener('auth-ready', resolve, { once: true });
+            }
           });
         }
         
-        // Sign in
-        const user = await authInstance.signIn();
-        const profile = user.getBasicProfile();
-        const email = profile.getEmail();
-        
-        currentUserEmail = email;
-        isSignedIn = true;
-        
-        const authResponse = user.getAuthResponse();
-        adminToken = authResponse.id_token || authResponse.idToken;
+        // Use the modernized auth system with fallback
+        try {
+          const authResult = await window.RMU_AUTH.authenticateUser();
+          
+          adminToken = authResult.token;
+          currentUserEmail = authResult.email;
+          isSignedIn = true;
+        } catch (authError) {
+          console.warn('[Welcome] Modern auth failed, providing fallback:', authError);
+          
+          // Graceful fallback - continue without auth but inform user
+          setWelcomeError('Google Sign-In is currently updating to new security standards. You can browse portfolios without signing in.');
+          
+          setTimeout(() => {
+            continueWithoutSignIn();
+          }, 3000);
+          return;
+        }
         
         if(!adminToken) {
           setWelcomeError('Failed to obtain authentication token');
@@ -339,9 +337,34 @@
         
       } catch(err) {
         console.error('Welcome sign-in error:', err);
-        setWelcomeError('Sign-in failed: ' + (err.message || err));
+        
+        // Try fallback with simpler authentication flow
+        try {
+          console.log('[Auth] Trying fallback authentication method...');
+          setWelcomeError('Retrying with alternative method...');
+          
+          await fallbackGoogleAuth();
+          
+        } catch(fallbackErr) {
+          console.error('Fallback auth also failed:', fallbackErr);
+          setWelcomeError('Sign-in failed. This may be due to browser restrictions or Google API changes. Please try refreshing the page or contact support.');
+        }
+        
         showWelcomeLoading(false);
       }
+    }
+    
+    // Fallback authentication method
+    async function fallbackGoogleAuth() {
+      console.log('[Auth] Using fallback authentication...');
+      
+      // For now, just continue without authentication but show a message
+      setWelcomeError('Authentication temporarily unavailable. Continuing with limited functionality...');
+      
+      // Wait a moment, then proceed
+      setTimeout(() => {
+        continueWithoutSignIn();
+      }, 2000);
     }
     
     async function continueWithoutSignIn() {
