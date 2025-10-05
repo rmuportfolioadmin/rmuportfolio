@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Portfolio Gallery</title>
   <meta name="description" content="Gallery of medical student portfolios" />
+  <link rel="icon" type="image/png" href="RMUlogo.png" />
   <link rel="stylesheet" href="gallery.css?v=20250928.1" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}</style>
@@ -12,7 +13,6 @@
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="config.js" defer></script>
   <script src="auth.js" defer></script>
-  <script src="gallery.js" defer></script>
   <script src="gallery.js" defer></script>
 </head>
 <body>
@@ -148,6 +148,23 @@
   </div>
 
   <script>
+  // Auto-generate files.json from data folder (utility function - defined early to avoid undefined errors)
+  async function generateFilesIndex() {
+    console.log('[Admin] Generating files.json content from data folder...');
+    const dataFiles = [];
+    const knownFiles = ['affans-medico-file-52.json','aieshas-medfolio-06-52.json','aliza-altaf-khans-16-R52-medfolio.json','aminah-liaqats-medfolio-R51.json','ans-javeds-medfolio.json','azharkhans-252-52-medfolio.json','calypsos-medfolio.json','eman-tariq-71-51-medfolio.json','fahmeeda-umers-56-52-medfolio.json','faiqa-farooqs-73-51-medfolio.json','fatima-aneess-63-R52medfolio .json','fatima-safdars-79-51-medfolio.json','hadia-khans-85-51-medfolio .json','hadia-mubashars-67-R52-portfolio.json','hadia-tanveers-87-51-portfolio.json','haiqa-munirs-91-51-medfolio.json','hassan-mehmood-221-R52.json','Ibrahim Shafi 280.json','kaleems-medfolio.json','marium-saleem-52B-105.json','mbks-medfolio-231-R52.json','muneeba-tehreems-medfolio .json','saidullah-280-R52.json','salwa-jannats-184-52-medfolio.json','saman-zahras-185-52medfolio.json','sattars-medfolio.json','Summaya-Muhammad-194-R52-medfolio.json','tehreem-durranis-medfolio.json','tehreem-durranis-R51-medfolio.json','wajiha-beintias-204-52-medfolio .json','waleejas-205-52-medfolio .json','zabu-bakar-saddique-medfolio.json','zabu-bakars-medfolio.json','zoha-saleems--214-52-medfolio.json'];
+    for(const filename of knownFiles) {
+      try {
+        const response = await fetch(`./data/${filename}`, { method: 'HEAD' });
+        if(response.ok) dataFiles.push({ file: `data/${filename}`, name: filename.replace(/\.json$/, '') });
+      } catch(err) {}
+    }
+    console.log(`%c[Admin] Found ${dataFiles.length} valid files`, 'color:green;font-weight:bold');
+    console.log('%cfiles.json content:', 'color:blue;font-weight:bold');
+    console.log(JSON.stringify(dataFiles, null, 2));
+    return dataFiles;
+  }
+
   // Portfolio Welcome & Authentication System
   (function() {
     const ADMIN_EMAIL = 'rmuportfolioa@gmail.com';
@@ -247,8 +264,15 @@
     
     async function signInFromWelcome() {
       try {
+        // Wait for Google API to be fully loaded
+        let retries = 0;
+        while(typeof gapi === 'undefined' && retries < 10) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          retries++;
+        }
+        
         if(typeof gapi === 'undefined') {
-          setWelcomeError('Google API not loaded. Please refresh and try again.');
+          setWelcomeError('Google API failed to load. Please refresh and try again.');
           return;
         }
         
@@ -262,7 +286,7 @@
           const config = window.RMU_CONFIG || {};
           authInstance = await gapi.auth2.init({
             client_id: config.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID,
-            scope: config.OAUTH_SCOPES || 'profile email openid'
+            scope: config.OAUTH_SCOPES || 'https://www.googleapis.com/auth/drive.appdata profile email openid'
           });
         }
         
@@ -900,10 +924,11 @@
           return;
         }
         
-        // Test a simple endpoint that doesn't require auth (only on production)
-        const response = await fetch(`${backendBase}/healthz`, {
+        // Test the root endpoint that we know works
+        const response = await fetch(`${backendBase}/`, {
           method: 'GET',
-          mode: 'cors'
+          mode: 'cors',
+          cache: 'no-store'
         }).catch(err => {
           console.log('[Admin] Backend fetch error:', err.message);
           return null;
@@ -929,8 +954,9 @@
     // Test backend after a short delay
     setTimeout(testBackend, 2000);
     
+    // Function already defined at the top of the file to avoid undefined errors
+    
     // Expose for debugging
-    // Auto-generate files.json from data folder (console utility)\n    async function generateFilesIndex() {\n      console.log('[Admin] Generating files.json content from data folder...');\n      const dataFiles = [];\n      const knownFiles = ['affans-medico-file-52.json','aieshas-medfolio-06-52.json','aliza-altaf-khans-16-R52-medfolio.json','aminah-liaqats-medfolio-R51.json','ans-javeds-medfolio.json','azharkhans-252-52-medfolio.json','calypsos-medfolio.json','eman-tariq-71-51-medfolio.json','fahmeeda-umers-56-52-medfolio.json','faiqa-farooqs-73-51-medfolio.json','fatima-aneess-63-R52medfolio .json','fatima-safdars-79-51-medfolio.json','hadia-khans-85-51-medfolio .json','hadia-mubashars-67-R52-portfolio.json','hadia-tanveers-87-51-portfolio.json','haiqa-munirs-91-51-medfolio.json','hassan-mehmood-221-R52.json','Ibrahim Shafi 280.json','kaleems-medfolio.json','marium-saleem-52B-105.json','mbks-medfolio-231-R52.json','muneeba-tehreems-medfolio .json','saidullah-280-R52.json','salwa-jannats-184-52-medfolio.json','saman-zahras-185-52medfolio.json','sattars-medfolio.json','Summaya-Muhammad-194-R52-medfolio.json','tehreem-durranis-medfolio.json','tehreem-durranis-R51-medfolio.json','wajiha-beintias-204-52-medfolio .json','waleejas-205-52-medfolio .json','zabu-bakar-saddique-medfolio.json','zabu-bakars-medfolio.json','zoha-saleems--214-52-medfolio.json'];\n      for(const filename of knownFiles) {\n        try {\n          const response = await fetch(`./data/${filename}`, { method: 'HEAD' });\n          if(response.ok) dataFiles.push({ file: `data/${filename}`, name: filename.replace(/\\.json$/, '') });\n        } catch(err) {}\n      }\n      console.log(`%c[Admin] Found ${dataFiles.length} valid files`, 'color:green;font-weight:bold');\n      console.log('%cfiles.json content:', 'color:blue;font-weight:bold');\n      console.log(JSON.stringify(dataFiles, null, 2));\n      return dataFiles;\n    }\n    \n    // Expose for debugging
     window.portfolioSystem = { 
       isAdminMode, 
       isSignedIn, 
@@ -939,14 +965,11 @@
       enableAdminMode, 
       disableAdminMode, 
       testBackend, 
-      generateFilesIndex,
+      generateFilesIndex: window.generateFilesIndex,
       signInFromWelcome,
       continueWithoutSignIn,
       loadDefaultPortfolio
     };
-    
-    // Make generateFilesIndex globally available to fix undefined error
-    window.generateFilesIndex = generateFilesIndex;
   })();
   </script>
 
