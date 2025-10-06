@@ -146,9 +146,10 @@
         return; 
       }
       
-      // Search only by filename (for template-based portfolios)
+      // Search across combined terms (name + filename)
       filtered = metaList.filter(m => {
-        return (m._name || '').includes(q);
+        const terms = m._terms || (m._name || '') + ' ' + (m.file || '');
+        return terms.includes(q);
       });
       
       render();
@@ -184,14 +185,19 @@
       const arr = await resp.json();
       if(!Array.isArray(arr)) throw new Error('files.json malformed');
       
-      // Process the loaded data - use filename only for template-based portfolios
+      // Process the loaded data
       metaList = arr.map(m => ({
         file: m.file,
-        name: m.name || 'untitled'  // Use exact filename from indexer
+        name: m.name || m.file || 'untitled'
       }));
       
-      // Search only by filename (not internal JSON content)
-      metaList.forEach(m => { m._name = (m.name||'').toLowerCase(); });
+      // Prepare combined search terms: name + filename
+      metaList.forEach(m => {
+        const name = (m.name||'').toLowerCase();
+        const file = (m.file||'').toLowerCase();
+        m._name = name;
+        m._terms = `${name} ${file}`.trim();
+      });
       filtered = metaList.slice();
       
       // Performance feedback for large datasets  
@@ -326,7 +332,10 @@
   function normalizeMetaFromRaw(file, raw){
     const name = raw.name || raw.title || 'Untitled';
     const m = { file, name };
-    m._name = (name||'').toLowerCase();
+    const n = (name||'').toLowerCase();
+    const f = (file||'').toLowerCase();
+    m._name = n;
+    m._terms = `${n} ${f}`.trim();
     return m;
   }
 
