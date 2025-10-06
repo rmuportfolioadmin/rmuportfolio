@@ -170,6 +170,17 @@
                     window.__USER_PORTFOLIO_DATA = event.data.data;
                     window.__USER_EMAIL = event.data.email;
                 }
+            } else if(event.data && event.data.type === 'admin-portfolio-data') {
+                console.log('[Portfolio] Received admin portfolio data from parent');
+                // Handle admin portfolio data loading
+                if(window.app && typeof window.app.normalizeLoadedData === 'function') {
+                    const normalized = window.app.normalizeLoadedData(event.data.data);
+                    window.app.loadDataDirectly(normalized);
+                } else {
+                    // Store for later consumption when app loads
+                    window.__ADMIN_PORTFOLIO_DATA = event.data.data;
+                    window.__ADMIN_FILENAME = event.data.filename;
+                }
             }
         });
     })();

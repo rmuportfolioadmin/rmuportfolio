@@ -1,5 +1,5 @@
 window.RMU_CONFIG = {
-  GOOGLE_CLIENT_ID: '20976864081-e9h6ns973t3n78tpa1u099fnh29t0q9k.apps.googleusercontent.com',
+  GOOGLE_CLIENT_ID: '738776771863-5558mme9unmotsk8bnhlrmb5sq4b2qnr.apps.googleusercontent.com',
   VC_EMAIL: 'rmuportfolioa@gmail.com',
   BACKEND_BASE: 'https://rmu-portfolio-backend-738776771863.us-central1.run.app',
   // Portfolio data location (root of repository)

@@ -762,16 +762,43 @@
           const url = `portfolio.html?admin=1&remote=1&file=${encodeURIComponent(portfolio.file)}`;
           const portfolioWindow = window.open(url, '_blank');
           
-          // Pass the data to the new window
+          // Pass the data to the new window with retry mechanism
           if(portfolioWindow) {
-            portfolioWindow.addEventListener('load', () => {
-              portfolioWindow.postMessage({
-                type: 'admin-portfolio-data',
-                data: portfolioData,
-                filename: portfolio.file,
-                source: 'remote'
-              }, '*');
-            });
+            const sendData = () => {
+              try {
+                portfolioWindow.postMessage({
+                  type: 'admin-portfolio-data',
+                  data: portfolioData,
+                  filename: portfolio.file,
+                  source: 'remote'
+                }, '*');
+                console.log('[Admin] Portfolio data sent to new window');
+              } catch(err) {
+                console.warn('[Admin] Failed to send portfolio data:', err);
+              }
+            };
+            
+            // Try multiple approaches to ensure message is received
+            // 1. Try immediately (might work if window loads fast)
+            setTimeout(sendData, 100);
+            
+            // 2. Try on load event
+            portfolioWindow.addEventListener('load', sendData);
+            
+            // 3. Try on DOM ready
+            const checkAndSend = setInterval(() => {
+              try {
+                if (portfolioWindow.document && portfolioWindow.document.readyState === 'complete') {
+                  sendData();
+                  clearInterval(checkAndSend);
+                }
+              } catch(err) {
+                // Cross-origin access might be blocked, that's ok
+              }
+            }, 200);
+            
+            // 4. Stop trying after 10 seconds
+            setTimeout(() => clearInterval(checkAndSend), 10000);
           }
           
           setStatus('Remote portfolio opened in new tab');

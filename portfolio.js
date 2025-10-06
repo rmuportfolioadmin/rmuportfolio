@@ -1007,6 +1007,55 @@ class PortfolioApp {
       return { achievements, reflections, personalInfo, profilePhoto };
     }
 
+    // Load data directly into the app (for admin portfolios or external data)
+    loadDataDirectly(normalizedData) {
+      try {
+        console.log('[loadDataDirectly] Loading external portfolio data');
+        
+        // Clear current state
+        this.achievements = [];
+        this.reflections = [];
+        
+        // Apply the normalized data
+        this.achievements = normalizedData.achievements || [];
+        this.reflections = normalizedData.reflections || [];
+        
+        // Handle personal info and profile photo
+        if (normalizedData.personalInfo) {
+          try {
+            localStorage.setItem('personalInfo', JSON.stringify(normalizedData.personalInfo));
+          } catch(_) {}
+        }
+        
+        if (normalizedData.profilePhoto) {
+          try {
+            localStorage.setItem('profilePhoto', normalizedData.profilePhoto);
+          } catch(_) {}
+        } else {
+          try {
+            localStorage.removeItem('profilePhoto');
+          } catch(_) {}
+        }
+        
+        // Render all components
+        this.loadPersonalInfo();
+        this.renderAchievements();
+        this.renderReflections();
+        this.updateLinkedAchievements();
+        
+        // Make sections visible and remove loading state
+        document.querySelectorAll('#personal.section,#descriptive.section,#reflective.section').forEach(s => {
+          s.style.visibility = 'visible';
+        });
+        document.body.classList.remove('loading-initial');
+        
+        console.log('[loadDataDirectly] Successfully loaded external portfolio data');
+        
+      } catch(err) {
+        console.error('[loadDataDirectly] Failed to load data:', err);
+      }
+    }
+
   
   
 
@@ -2847,6 +2896,20 @@ const app = new PortfolioApp();
 // scripts can reliably reference it as `app`. Top-level `const` does not
 // always create a `window` property in all environments, so set it here.
 window.app = app;
+
+// Check if admin portfolio data was received before app initialization
+if (window.__ADMIN_PORTFOLIO_DATA) {
+  console.log('[Portfolio] Loading admin portfolio data that was received earlier');
+  try {
+    const normalized = app.normalizeLoadedData(window.__ADMIN_PORTFOLIO_DATA);
+    app.loadDataDirectly(normalized);
+    // Clear the stored data
+    window.__ADMIN_PORTFOLIO_DATA = null;
+    window.__ADMIN_FILENAME = null;
+  } catch(err) {
+    console.error('[Portfolio] Failed to load admin portfolio data:', err);
+  }
+}
 
 // Clean up resources when the page is being unloaded
 window.addEventListener('beforeunload', () => {

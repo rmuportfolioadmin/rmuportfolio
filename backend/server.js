@@ -350,6 +350,59 @@ function extractRollFromFilename(filename) {
   return '';
 }
 
+// Get user's personal portfolio from their Drive appdata folder
+app.get('/api/user-portfolio', async (req,res)=>{
+  try{
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const { email } = await verifyToken(token);
+    
+    console.log(`[user-portfolio] Loading portfolio for user: ${email}`);
+    
+    // Use user's OAuth token to access their Drive appdata
+    const drive = google.drive({ 
+      version: 'v3', 
+      auth: new google.auth.OAuth2()
+    });
+    
+    // Set the user's access token
+    drive.context._options.auth.setCredentials({ access_token: token });
+    
+    // Search for portfolio.json in user's appdata folder
+    const searchResp = await drive.files.list({
+      q: "name='portfolio.json' and parents in 'appDataFolder'",
+      spaces: 'appDataFolder',
+      fields: 'files(id,name,modifiedTime)'
+    });
+    
+    if(!searchResp.data.files || searchResp.data.files.length === 0) {
+      console.log(`[user-portfolio] No portfolio found in appdata for ${email}`);
+      return res.status(404).json({ error: 'No portfolio found in your Drive' });
+    }
+    
+    const file = searchResp.data.files[0];
+    console.log(`[user-portfolio] Found portfolio file:`, file.name, file.id);
+    
+    // Download the file content
+    const downloadResp = await drive.files.get({
+      fileId: file.id,
+      alt: 'media'
+    });
+    
+    const portfolioData = JSON.parse(downloadResp.data);
+    console.log(`[user-portfolio] Successfully loaded portfolio for ${email}`);
+    
+    res.status(200).json(portfolioData);
+    
+  }catch(err){
+    console.error('/api/user-portfolio error', err);
+    if(err.code === 404 || err.message.includes('not found')) {
+      return res.status(404).json({ error: 'Portfolio not found in your Google Drive' });
+    }
+    res.status(500).json({ error: err.message || 'Failed to load user portfolio' });
+  }
+});
+
 // Stubs for future Python jobs
 app.post('/api/run-json2excel', async (req,res)=>{
   return res.status(501).json({ error: 'Not implemented' });
