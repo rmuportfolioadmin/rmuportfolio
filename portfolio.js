@@ -3115,28 +3115,49 @@ PortfolioApp.prototype.loadFromDrive = async function() {
   try {
     // Guard: ensure gapi is available before attempting to use it
     if (typeof gapi === 'undefined' || !gapi || !gapi.client) {
-      this.showToast('Google API not loaded. Initialize Drive integration first.', 'error');
+      this.showToast('Google API not loaded', 'error');
       this.hideLoadingBar(false);
       return;
     }
+    
+    console.log('[Drive] Searching for portfolio in appDataFolder...');
     const filename = 'portfolio-data.json';
     const file = await this.findDriveFileInAppData(filename);
+    
     if (!file) {
-      console.log('No portfolio data found in user\'s appDataFolder. Migration skipped (appData scope only).');
-      this.showToast('No existing portfolio found. Created a new private one (legacy migration requires manual Import).', 'info');
+      console.log('[Drive] No portfolio data found in user\'s appDataFolder.');
+      this.showToast('No existing portfolio found, creating new...', 'info');
       await this.createDefaultPortfolioInAppData();
       return;
     }
-    const res = await gapi.client.request({ path: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, method: 'GET' });
+    
+    console.log(`[Drive] Loading portfolio from: ${file.name}`);
+    this.showToast(`Loading portfolio: ${file.name}`, 'info');
+    
+    const res = await gapi.client.request({ 
+      path: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, 
+      method: 'GET' 
+    });
+    
     const data = res.result;
     if (data) {
       this.processLoadedPortfolioData(data);
+      
+      // If loaded file has different name than expected, save a copy as portfolio-data.json
+      if (file.name !== 'portfolio-data.json') {
+        console.log(`[Drive] Loaded ${file.name}, saving as portfolio-data.json for consistency`);
+        setTimeout(() => {
+          this.saveToDrive(); // This will save as portfolio-data.json
+        }, 1000);
+      }
+      
+      this.showToast('Portfolio loaded successfully', 'success');
     } else {
       this.showToast('Failed to load portfolio data', 'error');
     }
   } catch (e) {
     console.error('loadFromDrive error', e);
-    this.showToast('Failed to load from Drive', 'error');
+    this.showToast('Failed to load from Drive: ' + (e.message || 'Unknown error'), 'error');
     this.hideLoadingBar(false);
     return;
   }
@@ -3205,38 +3226,37 @@ PortfolioApp.prototype.handleImportJsonFile = function(file) {
     this.showToast('Please select a .json file', 'error');
     return;
   }
+  
+  console.log(`[Import] Starting import of: ${file.name}`);
   this.showLoadingBar();
+  this.showToast(`Importing ${file.name}...`, 'info');
+  
   const reader = new FileReader();
   reader.onload = async (e) => {
     try {
       const text = e.target.result;
       const data = JSON.parse(text);
       if (typeof data !== 'object') throw new Error('Invalid JSON structure');
+      
+      console.log('[Import] JSON parsed successfully, loading into portfolio...');
       this.processLoadedPortfolioData(data);
-      // After loading into memory, immediately persist to Drive (creates file if needed)
+      
+      // Always save imported data as portfolio-data.json in appDataFolder
+      console.log('[Import] Saving to Drive as portfolio-data.json...');
       await this.saveToDrive();
-      this.showToast('Imported JSON and saved to your private Drive space', 'success');
-      // If the imported filename is NOT the canonical one expected by the site loader
-      // (which looks specifically for portfolio-data.json in the repo), automatically
-      // offer the correctly named file so the user can upload it without manual renaming.
-      try {
-        const importedNameLower = (file.name || '').toLowerCase();
-        if (importedNameLower !== 'portfolio-data.json') {
-          // Slight delay so the prior toast isn't overwritten instantly
-          setTimeout(()=>{
-            this.exportPortfolioJson('portfolio-data');
-            this.showToast('Provided canonical portfolio-data.json for repository upload', 'info');
-          }, 600);
-        }
-      } catch (canonErr) { /* non-fatal */ }
+      
+      this.showToast(`Successfully imported ${file.name} and saved to Drive`, 'success');
+      
+      console.log(`[Import] Import completed for: ${file.name}`);
       this.hideLoadingBar(true);
     } catch (err) {
-      console.error('Import JSON failed', err);
+      console.error('[Import] Import failed:', err);
       this.showToast('Failed to import JSON: ' + (err && err.message ? err.message : 'Unknown error'), 'error');
       this.hideLoadingBar(false);
     }
   };
   reader.onerror = () => {
+    console.error('[Import] File read error');
     this.showToast('Failed to read selected file', 'error');
     this.hideLoadingBar(false);
   };
@@ -3297,6 +3317,9 @@ PortfolioApp.prototype.processLoadedPortfolioData = function(data) {
 // Create default portfolio file in appDataFolder for new users
 PortfolioApp.prototype.createDefaultPortfolioInAppData = async function() {
   try {
+    console.log('[Drive] Creating new portfolio in appDataFolder...');
+    this.showToast('Creating new portfolio...', 'info');
+    
     const filename = 'portfolio-data.json';
     
     // Get current localStorage data to preserve any existing work
@@ -3332,16 +3355,32 @@ PortfolioApp.prototype.createDefaultPortfolioInAppData = async function() {
       content +
       close_delim;
 
-    await gapi.client.request({
+    const res = await gapi.client.request({
       path: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
       method: 'POST',
       headers: { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
       body: multipartRequestBody
     });
     
-    console.log('Created default portfolio file in appDataFolder');
+    if (res.result && res.result.id) {
+      console.log('[Drive] Default portfolio created with ID:', res.result.id);
+      
+      // Load the data into the current session
+      this.processLoadedPortfolioData(defaultData);
+      
+      this.showToast('New portfolio created successfully', 'success');
+      
+      // Force UI update to show the loaded data
+      setTimeout(() => {
+        this.hideLoadingBar(true);
+      }, 500);
+    } else {
+      throw new Error('Failed to create file in Drive');
+    }
   } catch (e) {
-    console.error('Failed to create default portfolio file:', e);
+    console.error('[Drive] createDefaultPortfolioInAppData error:', e);
+    this.showToast('Failed to create portfolio: ' + (e.message || 'Unknown error'), 'error');
+    this.hideLoadingBar(false);
     throw e;
   }
 }
