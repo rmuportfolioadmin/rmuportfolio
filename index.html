@@ -75,6 +75,14 @@
     body.admin-mode #gallery-grid .gal-row{cursor:pointer}
     body.admin-mode #gallery-grid .gal-row:hover{transform:translateY(-2px);box-shadow:0 8px 25px -8px rgba(10,70,150,.25)}
     
+  /* Admin loading overlay (RMU theme) */
+  #admin-loading-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10002;backdrop-filter:saturate(1.05) blur(2px);}
+  body.admin-loading #admin-loading-overlay{display:flex}
+  .admin-loading-card{display:flex;align-items:center;gap:10px;background:#fff;border:2px solid #d4b071;border-radius:14px;padding:12px 16px;box-shadow:0 16px 48px -16px rgba(110,28,23,.28)}
+  .admin-loading-spinner{width:18px;height:18px;border-radius:50%;border:3px solid #f7efe6;border-top-color:#6e1c17;animation:adminSpin .8s linear infinite}
+  .admin-loading-text{font:600 13px Inter,system-ui,sans-serif;color:#6e1c17;letter-spacing:.2px}
+  @keyframes adminSpin{to{transform:rotate(360deg)}}
+    
     /* Welcome Modal Styles */
     .welcome-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:saturate(1.2) blur(8px);display:none;align-items:center;justify-content:center;z-index:10001}
     .welcome-modal{width:min(560px,92vw);background:#fff;border-radius:20px;border:2px solid #d4b071;box-shadow:0 32px 80px -16px rgba(110,28,23,.45);padding:32px;text-align:center}
@@ -143,6 +151,14 @@
         <button id="admin-cancel" class="admin-modal-btn admin-modal-ghost">Cancel</button>
         <button id="admin-signin-confirm" class="admin-modal-btn admin-modal-primary">Sign In with Google</button>
       </div>
+    </div>
+  </div>
+  
+  <!-- Admin Loading Overlay (shown while opening remote portfolio) -->
+  <div id="admin-loading-overlay" aria-live="polite" aria-busy="true" role="status">
+    <div class="admin-loading-card">
+      <div class="admin-loading-spinner" aria-hidden="true"></div>
+      <div class="admin-loading-text">Opening portfolio…</div>
     </div>
   </div>
 
