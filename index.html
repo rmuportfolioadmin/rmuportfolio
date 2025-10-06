@@ -672,25 +672,22 @@
       portfolios.forEach((portfolio, index) => {
         const row = document.createElement('div');
         row.className = 'gal-row';
-  row.setAttribute('data-file-id', portfolio.id);
-  row.setAttribute('data-filename', portfolio.file);
-  if (portfolio.basename) row.setAttribute('data-basename', portfolio.basename);
+        row.setAttribute('data-file-id', portfolio.id);
+        row.setAttribute('data-filename', portfolio.file);
+        if (portfolio.basename) row.setAttribute('data-basename', portfolio.basename);
         row.setAttribute('data-source', portfolio.source);
         // Store extra searchable fields to improve search coverage for remote items
         if (portfolio.roll) row.setAttribute('data-roll', portfolio.roll);
         if (portfolio.email) row.setAttribute('data-email', portfolio.email);
-        
         // Extract name from filename or use roll/email
         const displayName = extractDisplayName(portfolio.file, portfolio.roll, portfolio.email);
         const rollNumber = portfolio.roll || 'N/A';
         const lastUpdated = portfolio.updatedAt === 'Local File' ? 'Local File' : 
                            portfolio.updatedAt ? new Date(portfolio.updatedAt).toLocaleDateString() : 'Unknown';
-        
         // Source badge
         const sourceBadge = portfolio.source === 'local' ? 
           '<span class="gal-badge gal-badge-local">Local</span>' :
           '<span class="gal-badge gal-badge-remote">Remote</span>';
-        
         row.setAttribute('data-name', displayName);
         row.innerHTML = `
           <div class="gal-avatar">${getInitials(displayName)}</div>
@@ -702,12 +699,26 @@
             ${sourceBadge}
           </div>
         `;
-        
         // Add click handler to load portfolio
         row.addEventListener('click', () => loadPortfolioAdmin(portfolio));
-        
+        // Always remove .hidden in case of re-render
+        row.classList.remove('hidden');
         elements.galleryGrid.appendChild(row);
       });
+
+      // Always (re)bind the search filter after rendering
+      if (elements.searchBox) {
+        // Remove any previous event listeners by replacing the node
+        const oldInput = elements.searchBox;
+        const newInput = oldInput.cloneNode(true);
+        oldInput.parentNode.replaceChild(newInput, oldInput);
+        elements.searchBox = newInput;
+        elements.searchBox.addEventListener('input', () => filterAdminPortfolios(elements.searchBox.value));
+      }
+      // Apply filter if there is a current query
+      if (elements.searchBox && elements.searchBox.value) {
+        filterAdminPortfolios(elements.searchBox.value);
+      }
       
       // Enable search filtering (override any prior gallery handler)
       if(elements.searchBox) {
