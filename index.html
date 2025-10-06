@@ -753,7 +753,8 @@
   const searchText = (name + ' ' + extraName + ' ' + meta + ' ' + filename + ' ' + basename + ' ' + roll + ' ' + email).toLowerCase();
         const matches = !query || searchText.includes(query.toLowerCase());
         
-        row.style.display = matches ? 'flex' : 'none';
+        // Use CSS class to hide (display:none !important) to override admin-mode row display
+        row.classList.toggle('hidden', !matches);
         if(matches) visibleCount++;
       });
       
