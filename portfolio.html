@@ -233,9 +233,11 @@
                         }
                     }
                     
-                    // Enable user authentication UI
+                    // Enable user authentication UI immediately
                     document.body.classList.add('user-authenticated');
                     document.body.classList.add('signed-in'); // Show save-to-server and other auth-required buttons
+                    // Also dispatch an auth state event for any listeners
+                    try { document.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { signedIn: true, email: userEmail } })); } catch(_) {}
                     
                     // Clean up sessionStorage to prevent conflicts
                     try {
@@ -286,12 +288,30 @@
         }
         
         // AGGRESSIVE CACHE CLEARING - Ensure no previous portfolio data remains
+        // Preserve user auth context when in user mode so buttons and Drive features remain available
         try {
-            localStorage.clear();
-            sessionStorage.clear();
-            delete window.__PRELOADED_PORTFOLIO_DATA;
-            delete window.app;
-            console.log('[portfolio-loader] ✓ Cleared all cache and previous data');
+            const qp = new URLSearchParams(location.search);
+            const isUserMode = qp.get('user') === '1';
+            let preserved = {};
+            const preserveKeys = ['isUserMode','userEmail','userToken','userPortfolioData'];
+            if (isUserMode) {
+                try {
+                    preserveKeys.forEach(k => preserved[k] = sessionStorage.getItem(k));
+                } catch(_) {}
+            }
+            // Avoid wiping everything when in user mode; clear selectively
+            try { delete window.__PRELOADED_PORTFOLIO_DATA; } catch(_) {}
+            try { delete window.app; } catch(_) {}
+            // Clear only volatile caches; keep localStorage (personal info) intact to avoid data loss
+            // Use sessionStorage.clear but restore preserved user auth keys
+            try { sessionStorage.clear(); } catch(_) {}
+            if (isUserMode) {
+                try { preserveKeys.forEach(k => { if (preserved[k] !== null && preserved[k] !== undefined) sessionStorage.setItem(k, preserved[k]); }); } catch(_) {}
+                console.log('[portfolio-loader] ✓ Cleared transient cache, preserved user auth context');
+            } else {
+                try { localStorage.clear(); } catch(_) {}
+                console.log('[portfolio-loader] ✓ Cleared all cache for non-user mode');
+            }
         } catch(e) { console.warn('[portfolio-loader] Cache clearing error:', e); }
         
         // Mark that we're loading a specific file to prevent repo override
@@ -1247,29 +1267,42 @@ window.addEventListener('load', () => {
     
     async function signInAndSave() {
         try {
-            if(typeof gapi === 'undefined') {
-                setAuthError('Google API not loaded. Please refresh and try again.');
-                return;
-            }
-            
             showAuthOverlay(false);
             showSaveModal(true, 'Signing in...');
             
-            // Initialize gapi.auth2 if needed
-            await new Promise(resolve => gapi.load('auth2', resolve));
-            let authInstance = gapi.auth2.getAuthInstance();
-            if(!authInstance) {
-                const config = window.RMU_CONFIG || {};
-                authInstance = await gapi.auth2.init({
-                    client_id: config.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID,
-                    scope: config.OAUTH_SCOPES || 'profile email openid'
-                });
+            let signedIn = false;
+            // Prefer RMU_AUTH (GIS) for token and email
+            if (window.RMU_AUTH && typeof RMU_AUTH.authenticateUser === 'function') {
+                try {
+                    const res = await RMU_AUTH.authenticateUser();
+                    if (res && res.token) {
+                        window.__USER_TOKEN = res.token;
+                        if (res.email) window.__USER_EMAIL = res.email;
+                        document.body.classList.add('signed-in');
+                        signedIn = true;
+                    }
+                } catch(e) {
+                    console.warn('[Save] RMU_AUTH auth failed, will try gapi if available', e);
+                }
             }
             
-            // Sign in
-            await authInstance.signIn();
-            
-            document.body.classList.add('signed-in');
+            if (!signedIn) {
+                // Fallback to gapi.auth2 if present
+                if (typeof gapi === 'undefined') {
+                    throw new Error('Google API not loaded. Please refresh and try again.');
+                }
+                await new Promise(resolve => gapi.load('auth2', resolve));
+                let authInstance = gapi.auth2.getAuthInstance();
+                if(!authInstance) {
+                    const config = window.RMU_CONFIG || {};
+                    authInstance = await gapi.auth2.init({
+                        client_id: config.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID,
+                        scope: config.OAUTH_SCOPES || 'profile email openid'
+                    });
+                }
+                await authInstance.signIn();
+                document.body.classList.add('signed-in');
+            }
             await performSave();
             
         } catch(err) {
@@ -1298,9 +1331,11 @@ window.addEventListener('load', () => {
             // Build payload
             const personal = JSON.parse(localStorage.getItem('personalInfo') || '{}');
             
-            // Get email from gapi.auth2
+            // Determine email from RMU_AUTH or gapi
             let email = personal.email || '';
-            if(typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
+            if (window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
+                email = RMU_AUTH.getCurrentUserEmail() || email;
+            } else if(typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
                 const authInstance = gapi.auth2.getAuthInstance();
                 const user = authInstance.currentUser.get();
                 if(user && user.isSignedIn()) {
@@ -1353,9 +1388,15 @@ window.addEventListener('load', () => {
             
             showSaveModal(true, 'Saving to server...');
             
-            // Get ID token from gapi.auth2
+            // Get backend auth token: prefer RMU_AUTH token, else gapi id_token
             let idToken = null;
-            if(typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
+            if (window.__USER_TOKEN) {
+                idToken = window.__USER_TOKEN; // RMU backend expects Bearer access token
+            }
+            if(!idToken && window.RMU_AUTH && typeof RMU_AUTH.getIdToken === 'function') {
+                try { idToken = await RMU_AUTH.getIdToken(); } catch(_) {}
+            }
+            if(!idToken && typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
                 const authInstance = gapi.auth2.getAuthInstance();
                 const user = authInstance.currentUser.get();
                 if(user && user.isSignedIn()) {
@@ -1427,23 +1468,18 @@ window.addEventListener('load', () => {
     // Show save button when signed in
     function checkSignInStatus() {
         let isSignedIn = false;
-        
-        // Check RMU_AUTH first
-        if(window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
+        // Check session user mode
+        try { isSignedIn = isSignedIn || (sessionStorage.getItem('isUserMode') === 'true' && !!sessionStorage.getItem('userEmail')); } catch(_) {}
+        // Check RMU_AUTH
+        if(!isSignedIn && window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
             isSignedIn = true;
         }
-        
         // Check gapi.auth2
         if(!isSignedIn && typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
             const authInstance = gapi.auth2.getAuthInstance();
             isSignedIn = authInstance.isSignedIn.get();
         }
-        
-        if(isSignedIn) {
-            document.body.classList.add('signed-in');
-        } else {
-            document.body.classList.remove('signed-in');
-        }
+        document.body.classList.toggle('signed-in', !!isSignedIn);
     }
     
     // Check initial sign-in status
