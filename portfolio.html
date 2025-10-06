@@ -189,6 +189,13 @@
                 if(window.app && typeof window.app.normalizeLoadedData === 'function') {
                     const normalized = window.app.normalizeLoadedData(event.data.data);
                     window.app.loadDataDirectly(normalized);
+                    // Cancel any pending default redirects or loaders
+                    try {
+                      const pre = document.getElementById('preload-status'); if(pre) pre.remove();
+                    } catch(_){ }
+                    // Mark adopted to prevent auto-loader overriding
+                    window.__ADOPTED_SPECIFIC_PORTFOLIO = true;
+                    try { localStorage.setItem('__lastPortfolioFile', 'admin-remote'); }catch(_){ }
                 } else {
                     // Store for later consumption when app loads
                     window.__ADMIN_PORTFOLIO_DATA = event.data.data;
@@ -306,6 +313,9 @@
         const fileUrl = file.includes('?') ? `${file}&cb=${cacheBuster}` : `${file}?cb=${cacheBuster}`;
         
         // Add overall timeout to prevent infinite loading
+        // If admin remote mode, do not auto-redirect to default JSON; admin data will be injected via postMessage
+        const isAdminMode = /(^|[?&])admin=1(&|$)/.test(location.search);
+        const isRemoteMode = /(^|[?&])remote=1(&|$)/.test(location.search);
         const overallTimeout = setTimeout(() => {
             console.error('[portfolio-loader] Overall timeout reached - falling back to default portfolio');
             const pre = document.getElementById('preload-status');
@@ -314,9 +324,9 @@
                 pre.style.background = '#fff4e6';
             }
             // Redirect to default portfolio after 2 seconds
-            setTimeout(() => {
-                window.location.href = 'portfolio.html?file=portfolio-data.json';
-            }, 2000);
+            if(!(isAdminMode && isRemoteMode)){
+              setTimeout(() => { window.location.href = 'portfolio.html?file=portfolio-data.json'; }, 2000);
+            }
         }, 15000); // 15 second overall timeout
         
         (function fetchWithRetry(url, attempt=1){
@@ -370,9 +380,9 @@
                     if (is404) {
                         pre.textContent = `File not found - Redirecting to default portfolio...`;
                         pre.style.background = '#fff4e6';
-                        setTimeout(() => {
-                            window.location.href = 'portfolio.html?file=portfolio-data.json';
-                        }, 2000);
+                        if(!(isAdminMode && isRemoteMode)){
+                          setTimeout(() => { window.location.href = 'portfolio.html?file=portfolio-data.json'; }, 2000);
+                        }
                     } else {
                         pre.textContent = `Failed to load ${file.replace('data/','')}`;
                         pre.style.background = '#ffe6e6';

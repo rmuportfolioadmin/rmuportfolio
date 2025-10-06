@@ -759,8 +759,8 @@
           
           const portfolioData = await response.json();
           
-          // Open portfolio in new tab/window with the data
-          const url = `portfolio.html?admin=1&remote=1&file=${encodeURIComponent(portfolio.file)}`;
+          // Open portfolio in new tab/window (no ?file param to avoid loader overriding admin data)
+          const url = `portfolio.html?admin=1&remote=1`;
           const portfolioWindow = window.open(url, '_blank');
           
           // Pass the data to the new window with comprehensive retry mechanism

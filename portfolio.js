@@ -2963,6 +2963,12 @@ if (window.__ADMIN_PORTFOLIO_DATA) {
     // Clear the stored data
     window.__ADMIN_PORTFOLIO_DATA = null;
     window.__ADMIN_FILENAME = null;
+    // Prevent any auto-loader overrides
+    try {
+      window.__ADOPTED_SPECIFIC_PORTFOLIO = true;
+      localStorage.setItem('__lastPortfolioFile', 'admin-remote');
+      const pre = document.getElementById('preload-status'); if(pre) pre.remove();
+    } catch(_){ }
   } catch(err) {
     console.error('[Portfolio] Failed to load admin portfolio data:', err);
   }
