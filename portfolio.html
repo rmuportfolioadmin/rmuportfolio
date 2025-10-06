@@ -172,6 +172,19 @@
                 }
             } else if(event.data && event.data.type === 'admin-portfolio-data') {
                 console.log('[Portfolio] Received admin portfolio data from parent');
+                
+                // Send confirmation back to parent window
+                try {
+                    if(event.source && event.source !== window) {
+                        event.source.postMessage({
+                            type: 'admin-data-received',
+                            success: true
+                        }, '*');
+                    }
+                } catch(e) {
+                    console.warn('[Portfolio] Could not send confirmation to parent:', e);
+                }
+                
                 // Handle admin portfolio data loading
                 if(window.app && typeof window.app.normalizeLoadedData === 'function') {
                     const normalized = window.app.normalizeLoadedData(event.data.data);

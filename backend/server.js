@@ -359,14 +359,14 @@ app.get('/api/user-portfolio', async (req,res)=>{
     
     console.log(`[user-portfolio] Loading portfolio for user: ${email}`);
     
-    // Use user's OAuth token to access their Drive appdata
+    // Create OAuth2 client with user's access token
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: token });
+    
     const drive = google.drive({ 
       version: 'v3', 
-      auth: new google.auth.OAuth2()
+      auth: oauth2Client
     });
-    
-    // Set the user's access token
-    drive.context._options.auth.setCredentials({ access_token: token });
     
     // Search for portfolio.json in user's appdata folder
     const searchResp = await drive.files.list({
