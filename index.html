@@ -464,15 +464,20 @@
           if(filesResp.ok) {
             const filesData = await filesResp.json();
             if(Array.isArray(filesData)) {
-              localPortfolios = filesData.map(item => ({
-                id: `local_${item.file}`,
-                file: item.name || item.file.replace(/^data\//, '').replace(/\.json$/, ''),
-                roll: extractRollFromFilename(item.file),
-                email: '',
-                updatedAt: 'Local File',
-                source: 'local',
-                localPath: item.file
-              }));
+              localPortfolios = filesData.map(item => {
+                const basename = (item.file || '').replace(/^data\//, '').replace(/\.json$/i, '');
+                return {
+                  id: `local_${item.file}`,
+                  // Keep display file as before, but also keep actual basename for search
+                  file: item.name || basename,
+                  basename,
+                  roll: extractRollFromFilename(item.file),
+                  email: '',
+                  updatedAt: 'Local File',
+                  source: 'local',
+                  localPath: item.file
+                };
+              });
               console.log(`[Admin] Loaded ${localPortfolios.length} local portfolios`);
             }
           }
@@ -514,17 +519,21 @@
             if(response.ok) {
               const backendData = await response.json();
               if(Array.isArray(backendData)) {
-                remotePortfolios = backendData.map(item => ({
-                  id: item.id || `drive_${item.file}`,
-                  file: item.file,
-                  name: extractDisplayName(item.file, item.roll, item.email),
-                  roll: item.roll || '',
-                  email: item.email || '',
-                  updatedAt: item.updatedAt || 'Unknown',
-                  // Use 'remote' to align with UI logic
-                  source: 'remote',
-                  driveId: item.id
-                }));
+                remotePortfolios = backendData.map(item => {
+                  const basename = (item.file || '').replace(/^data\//, '').replace(/\.json$/i, '');
+                  return {
+                    id: item.id || `drive_${item.file}`,
+                    file: item.file,
+                    basename,
+                    name: extractDisplayName(item.file, item.roll, item.email),
+                    roll: item.roll || '',
+                    email: item.email || '',
+                    updatedAt: item.updatedAt || 'Unknown',
+                    // Use 'remote' to align with UI logic
+                    source: 'remote',
+                    driveId: item.id
+                  };
+                });
                 console.log(`[Admin] Loaded ${remotePortfolios.length} portfolios from Google Drive`);
               }
             } else {
@@ -663,8 +672,9 @@
       portfolios.forEach((portfolio, index) => {
         const row = document.createElement('div');
         row.className = 'gal-row';
-        row.setAttribute('data-file-id', portfolio.id);
-        row.setAttribute('data-filename', portfolio.file);
+  row.setAttribute('data-file-id', portfolio.id);
+  row.setAttribute('data-filename', portfolio.file);
+  if (portfolio.basename) row.setAttribute('data-basename', portfolio.basename);
         row.setAttribute('data-source', portfolio.source);
         // Store extra searchable fields to improve search coverage for remote items
         if (portfolio.roll) row.setAttribute('data-roll', portfolio.roll);
@@ -732,11 +742,12 @@
       rows.forEach(row => {
         const name = row.querySelector('.gal-name')?.textContent || '';
         const meta = row.querySelector('.gal-meta')?.textContent || '';
-        const filename = row.getAttribute('data-filename') || '';
+  const filename = row.getAttribute('data-filename') || '';
+  const basename = row.getAttribute('data-basename') || '';
         const roll = row.getAttribute('data-roll') || '';
         const email = row.getAttribute('data-email') || '';
         // Search across all visible text plus hidden attributes for both local and remote
-        const searchText = (name + ' ' + meta + ' ' + filename + ' ' + roll + ' ' + email).toLowerCase();
+  const searchText = (name + ' ' + meta + ' ' + filename + ' ' + basename + ' ' + roll + ' ' + email).toLowerCase();
         const matches = !query || searchText.includes(query.toLowerCase());
         
         row.style.display = matches ? 'flex' : 'none';
