@@ -134,6 +134,12 @@
 
   let searchTimeout;
   function applyFilter(){
+    // In admin mode, gallery search should not interfere with admin list filtering
+    try {
+      if (window.__DISABLE_GALLERY_SEARCH || document.body.classList.contains('admin-mode')) {
+        return;
+      }
+    } catch(_) {}
     // Clear previous timeout to debounce rapid typing
     clearTimeout(searchTimeout);
     
@@ -157,6 +163,8 @@
   }
 
   async function loadIndex(){
+    // Skip index loading when admin mode is active
+    try { if (document.body.classList.contains('admin-mode')) return; } catch(_) {}
     setStatus('Loading portfolio index...');
     
     // Clear any previous portfolio data from memory/cache

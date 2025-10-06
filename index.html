@@ -691,6 +691,7 @@
           '<span class="gal-badge gal-badge-local">Local</span>' :
           '<span class="gal-badge gal-badge-remote">Remote</span>';
         
+        row.setAttribute('data-name', displayName);
         row.innerHTML = `
           <div class="gal-avatar">${getInitials(displayName)}</div>
           <div class="gal-info">
@@ -708,9 +709,10 @@
         elements.galleryGrid.appendChild(row);
       });
       
-      // Enable search filtering
+      // Enable search filtering (override any prior gallery handler)
       if(elements.searchBox) {
-        elements.searchBox.oninput = () => filterAdminPortfolios(elements.searchBox.value);
+        try { elements.searchBox.oninput = null; } catch(_){ }
+        elements.searchBox.addEventListener('input', () => filterAdminPortfolios(elements.searchBox.value));
       }
     }
     
@@ -740,14 +742,15 @@
       let visibleCount = 0;
       
       rows.forEach(row => {
-        const name = row.querySelector('.gal-name')?.textContent || '';
+  const name = row.querySelector('.gal-name')?.textContent || '';
         const meta = row.querySelector('.gal-meta')?.textContent || '';
   const filename = row.getAttribute('data-filename') || '';
   const basename = row.getAttribute('data-basename') || '';
         const roll = row.getAttribute('data-roll') || '';
         const email = row.getAttribute('data-email') || '';
+  const extraName = (row.getAttribute('data-name') || '');
         // Search across all visible text plus hidden attributes for both local and remote
-  const searchText = (name + ' ' + meta + ' ' + filename + ' ' + basename + ' ' + roll + ' ' + email).toLowerCase();
+  const searchText = (name + ' ' + extraName + ' ' + meta + ' ' + filename + ' ' + basename + ' ' + roll + ' ' + email).toLowerCase();
         const matches = !query || searchText.includes(query.toLowerCase());
         
         row.style.display = matches ? 'flex' : 'none';
