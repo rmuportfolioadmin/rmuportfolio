@@ -1533,92 +1533,49 @@ window.addEventListener('load', () => {
                 throw new Error('Unable to obtain authentication token');
             }
             
-            // Use user's own Google Drive instead of backend to avoid quota issues
-            if (typeof gapi !== 'undefined' && gapi.client && gapi.client.getToken()) {
-                console.log('[Save] Using user\'s Google Drive directly to avoid service account quota issues');
-                
-                // Save directly to user's Drive
-                const content = JSON.stringify(payload.portfolio, null, 2);
-                const boundary = '-------314159265358979323846';
-                const delimiter = "\r\n--" + boundary + "\r\n";
-                const close_delim = "\r\n--" + boundary + "--";
-                
-                // Check if user already has a portfolio file
-                let fileId = null;
-                try {
-                    const searchResponse = await gapi.client.request({
-                        path: 'https://www.googleapis.com/drive/v3/files',
-                        method: 'GET',
-                        params: {
-                            q: `name='${filename}.json' and trashed=false`,
-                            fields: 'files(id,name,owners,parents)'
-                        }
-                    });
-                    
-                    if (searchResponse.result.files && searchResponse.result.files.length > 0) {
-                        // Use existing file if user owns it
-                        const existingFile = searchResponse.result.files[0];
-                        const owners = existingFile.owners || [];
-                        const currentUserOwns = owners.some(owner => owner.emailAddress === email);
-                        
-                        if (currentUserOwns) {
-                            fileId = existingFile.id;
-                            console.log('[Save] Found existing file owned by user:', fileId);
-                        } else {
-                            console.log('[Save] File exists but owned by another user, creating new file with unique name');
-                            const timestamp = new Date().toISOString().slice(0,10);
-                            filename = `${filename}-${email.split('@')[0]}-${timestamp}`;
-                        }
+            // Use backend with improved service account handling
+            // The backend will use temporary storage, validate, then transfer to admin drive
+            const response = await fetch(base + '/api/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + idToken
+                },
+                body: JSON.stringify({
+                    ...payload,
+                    // Add metadata for better backend processing
+                    metadata: {
+                        userAgent: navigator.userAgent,
+                        timestamp: new Date().toISOString(),
+                        source: 'portfolio-website',
+                        version: '1.0'
                     }
-                } catch (searchErr) {
-                    console.warn('[Save] Search failed, will create new file:', searchErr);
-                }
+                }),
+                credentials: 'omit',
+                cache: 'no-store'
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.text().catch(() => response.statusText);
                 
-                const metadata = {
-                    name: `${filename}.json`,
-                    mimeType: 'application/json'
-                };
-                
-                const multipartRequestBody =
-                    delimiter +
-                    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-                    JSON.stringify(metadata) +
-                    delimiter +
-                    'Content-Type: application/json\r\n\r\n' +
-                    content +
-                    close_delim;
-                
-                let apiPath, method;
-                if (fileId) {
-                    // Update existing file
-                    apiPath = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`;
-                    method = 'PATCH';
+                // Handle specific quota errors with helpful messages
+                if (errorData.includes('storage quota')) {
+                    throw new Error('Storage temporarily unavailable. The system administrator has been notified. Please try again in a few minutes.');
+                } else if (errorData.includes('Access denied')) {
+                    throw new Error('Access denied. Please ensure you are using the correct account and try again.');
                 } else {
-                    // Create new file
-                    apiPath = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-                    method = 'POST';
+                    throw new Error('Server error: ' + errorData);
                 }
-                
-                const driveResponse = await gapi.client.request({
-                    path: apiPath,
-                    method: method,
-                    headers: {
-                        'Content-Type': `multipart/related; boundary="${boundary}"`
-                    },
-                    body: multipartRequestBody
-                });
-                
-                if (driveResponse.result && driveResponse.result.id) {
-                    console.log('[Save] ✅ Portfolio saved to user\'s Drive successfully:', driveResponse.result.id);
-                    showSaveModal(true, 'Portfolio saved successfully to your Google Drive!\nFile: ' + filename + '.json');
-                    saveCancel.style.display = 'inline-block';
-                    saveCancel.onclick = () => showSaveModal(false);
-                } else {
-                    throw new Error('Failed to save to Google Drive');
-                }
-                
+            }
+            
+            const result = await response.json().catch(() => ({success: false}));
+            
+            if (result && result.success) {
+                showSaveModal(true, 'Portfolio saved successfully!' + (result.fileId ? ` (ID: ${result.fileId})` : ''));
+                saveCancel.style.display = 'inline-block';
+                saveCancel.onclick = () => showSaveModal(false);
             } else {
-                throw new Error('Google Drive API not available. Please ensure you are signed in and try again.');
+                throw new Error(result.error || 'Unknown server error');
             }
             
         } catch(err) {
