@@ -136,70 +136,370 @@ async function findExistingInFolder(drive, { roll, email }){
   return (r2.data.files && r2.data.files[0]) || null;
 }
 
-// Save endpoint (any signed-in user) — writes to private backend folder using service account
+// Configuration for two-tier storage system
+const TEMP_FOLDER_NAME = process.env.TEMP_FOLDER_NAME || 'portfolio-temp-storage';
+const FINAL_FOLDER_NAME = process.env.FINAL_FOLDER_NAME || 'student-portfolios';
+
+// Helper functions for improved save system
+async function getOrCreateFolder(drive, folderName, parentId = null) {
+  try {
+    // Check if folder exists
+    const queryParts = [`name='${folderName}'`, `mimeType='application/vnd.google-apps.folder'`, `trashed=false`];
+    if (parentId) queryParts.push(`'${parentId}' in parents`);
+    
+    const folderQuery = await drive.files.list({
+      q: queryParts.join(' and '),
+      fields: 'files(id,name)'
+    });
+    
+    if (folderQuery.data.files && folderQuery.data.files.length > 0) {
+      return folderQuery.data.files[0].id;
+    }
+    
+    // Create folder if it doesn't exist
+    const folderMetadata = {
+      name: folderName,
+      mimeType: 'application/vnd.google-apps.folder'
+    };
+    if (parentId) folderMetadata.parents = [parentId];
+    
+    const folder = await drive.files.create({
+      resource: folderMetadata,
+      fields: 'id'
+    });
+    
+    console.log(`[Folder] Created folder: ${folderName} with ID: ${folder.data.id}`);
+    return folder.data.id;
+  } catch (error) {
+    throw new Error(`Failed to create/access folder ${folderName}: ${error.message}`);
+  }
+}
+
+async function saveToTemporaryStorage(drive, filename, portfolio, email, metadata) {
+  try {
+    // Ensure temporary folder exists
+    let tempFolderId = await getOrCreateFolder(drive, TEMP_FOLDER_NAME);
+    
+    const content = JSON.stringify({
+      portfolio,
+      metadata: {
+        ...metadata,
+        email,
+        uploadedAt: new Date().toISOString(),
+        status: 'temporary'
+      }
+    }, null, 2);
+    
+    const fileMetadata = {
+      name: `${filename}-temp-${Date.now()}.json`,
+      parents: [tempFolderId],
+      description: `Temporary portfolio file for ${email}`,
+      appProperties: {
+        originalFilename: filename,
+        userEmail: email,
+        status: 'temporary',
+        createdAt: new Date().toISOString()
+      }
+    };
+    
+    const media = {
+      mimeType: 'application/json',
+      body: content
+    };
+    
+    const response = await drive.files.create({
+      resource: fileMetadata,
+      media: media,
+      fields: 'id,name'
+    });
+    
+    console.log(`[TempSave] Saved to temporary storage: ${response.data.id}`);
+    return response.data.id;
+  } catch (error) {
+    console.error('[TempSave] Error saving to temporary storage:', error);
+    throw new Error('Failed to save to temporary storage: ' + error.message);
+  }
+}
+
+async function validatePortfolioFile(tempFileId, email, portfolio) {
+  try {
+    console.log('[Validate] Validating portfolio file...');
+    
+    // Basic validation checks
+    const checks = {
+      hasPersonalInfo: !!(portfolio.personalInfo && Object.keys(portfolio.personalInfo).length > 0),
+      hasValidEmail: isValidEmail(email),
+      hasAchievements: Array.isArray(portfolio.achievements),
+      hasReflections: Array.isArray(portfolio.reflections),
+      reasonableSize: JSON.stringify(portfolio).length < 10 * 1024 * 1024 // 10MB limit
+    };
+    
+    const failedChecks = Object.entries(checks)
+      .filter(([key, passed]) => !passed)
+      .map(([key]) => key);
+    
+    if (failedChecks.length > 0) {
+      return {
+        isValid: false,
+        error: `Validation failed: ${failedChecks.join(', ')}`
+      };
+    }
+    
+    // Additional content validation
+    if (portfolio.personalInfo && portfolio.personalInfo.rollNo) {
+      const rollPattern = /^\d{1,3}-?[RS]?\d{2}-?[A-Z]?$/i;
+      if (!rollPattern.test(portfolio.personalInfo.rollNo)) {
+        return {
+          isValid: false,
+          error: 'Invalid roll number format'
+        };
+      }
+    }
+    
+    return { isValid: true };
+  } catch (error) {
+    return {
+      isValid: false,
+      error: 'Validation process failed: ' + error.message
+    };
+  }
+}
+
+async function transferToFinalStorage(drive, tempFileId, filename, email, portfolio) {
+  try {
+    console.log(`[Transfer] Transferring ${tempFileId} to final storage for user: ${email}`);
+    
+    // Create user-specific folder structure: Final Folder -> User Folder
+    let finalFolderId = await getOrCreateFolder(drive, FINAL_FOLDER_NAME, DRIVE_PARENT_FOLDER_ID);
+    
+    // Create user-specific subfolder to avoid filename conflicts (based on authenticated user)
+    const userFolderName = `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    let userFolderId = await getOrCreateFolder(drive, userFolderName, finalFolderId);
+    
+    console.log(`[Transfer] Using user folder: ${userFolderName} (${userFolderId})`);
+    
+    // Generate filename based on portfolio content but ensure uniqueness per user
+    const rollNo = portfolio.personalInfo?.rollNo || 'unknown';
+    const portfolioEmail = portfolio.personalInfo?.email || 'unknown';
+    
+    // Create a more descriptive but still unique filename
+    const baseFilename = filename.replace(/[^a-zA-Z0-9\-_]/g, '_');
+    const uniqueFilename = `${baseFilename}_${rollNo}`;
+    
+    // Create final file metadata with enhanced ownership tracking
+    const fileMetadata = {
+      name: `${uniqueFilename}.json`,
+      parents: [userFolderId],
+      description: `Portfolio for ${portfolioEmail} (${rollNo}) - Owned by ${email} - Uploaded ${new Date().toISOString()}`,
+      appProperties: {
+        roll: rollNo,
+        portfolioEmail: portfolioEmail, // Email from portfolio data
+        email: email, // Authenticated user's email (owner)
+        uploadedBy: email, // Authenticated user's email
+        originalFilename: filename,
+        userId: email, // Primary ownership identifier (authenticated user)
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: 'final',
+        version: '1.0'
+      }
+    };
+    
+    // Clean portfolio content - remove any temporary metadata
+    const cleanContent = JSON.stringify(portfolio, null, 2);
+    
+    const media = {
+      mimeType: 'application/json',
+      body: cleanContent
+    };
+    
+    // Check if user already has a portfolio with the same base filename
+    console.log(`[Transfer] Checking for existing user portfolio with filename: ${filename}`);
+    const existingFiles = await drive.files.list({
+      q: `'${userFolderId}' in parents and trashed=false and mimeType='application/json'`,
+      fields: 'files(id,name,appProperties,modifiedTime)'
+    });
+    
+    // Look for files from this user with the same original filename
+    let existingUserFile = null;
+    if (existingFiles.data.files && existingFiles.data.files.length > 0) {
+      existingUserFile = existingFiles.data.files.find(file => {
+        const props = file.appProperties || {};
+        return (
+          props.userId === email && 
+          props.originalFilename === filename
+        );
+      });
+    }
+    
+    let response;
+    if (existingUserFile) {
+      console.log(`[Transfer] Updating existing user portfolio: ${existingUserFile.id}`);
+      
+      // Update existing file, preserving creation date and version history
+      const preservedProps = {
+        ...fileMetadata.appProperties,
+        createdAt: existingUserFile.appProperties?.createdAt || new Date().toISOString(),
+        uploadedBy: existingUserFile.appProperties?.uploadedBy || email,
+        version: `${parseFloat(existingUserFile.appProperties?.version || '1.0') + 0.1}`.substring(0, 3)
+      };
+      
+      response = await drive.files.update({
+        fileId: existingUserFile.id,
+        resource: { ...fileMetadata, appProperties: preservedProps },
+        media: media,
+        fields: 'id,name'
+      });
+      
+      console.log(`[Transfer] Updated existing portfolio: ${response.data.id}`);
+    } else {
+      console.log(`[Transfer] Creating new portfolio file for user`);
+      
+      // Create new file in user's folder
+      response = await drive.files.create({
+        resource: fileMetadata,
+        media: media,
+        fields: 'id,name'
+      });
+      
+      console.log(`[Transfer] Created new portfolio: ${response.data.id}`);
+    }
+    
+    console.log(`[Transfer] Successfully transferred to final storage: ${response.data.id}`);
+    return response.data.id;
+  } catch (error) {
+    console.error('[Transfer] Error transferring to final storage:', error);
+    throw new Error('Failed to transfer to final storage: ' + error.message);
+  }
+}
+
+async function cleanupTempFile(drive, tempFileId) {
+  try {
+    await drive.files.delete({
+      fileId: tempFileId
+    });
+    console.log(`[Cleanup] Deleted temporary file: ${tempFileId}`);
+  } catch (error) {
+    console.warn(`[Cleanup] Failed to delete temporary file ${tempFileId}:`, error.message);
+    // Don't throw error - cleanup failure shouldn't fail the whole operation
+  }
+}
+
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+function isValidPortfolioData(portfolio) {
+  return portfolio && 
+         typeof portfolio === 'object' &&
+         (Array.isArray(portfolio.achievements) || portfolio.achievements === undefined) &&
+         (Array.isArray(portfolio.reflections) || portfolio.reflections === undefined);
+}
+
+// Enhanced save endpoint with two-tier storage system
 app.post('/api/save', async (req, res) => {
-  try{
+  try {
+    console.log('[Save] Processing save request...');
+    
     const auth = req.headers['authorization'] || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
     const { email: userEmail } = await verifyToken(token);
 
-    const { roll = '', email = '', portfolio = null } = req.body || {};
-    if (!portfolio || typeof portfolio !== 'object') return res.status(400).json({ error: 'Missing portfolio object' });
-
-    const drive = await getDrive();
-    await ensureFolderAccessible(drive);
-
-    // Build metadata
-    const nameBase = (roll || email || userEmail || 'portfolio').toString().trim().replace(/[^A-Za-z0-9._-]+/g, '-').slice(0,80) || 'portfolio';
-    const filename = `${nameBase}.json`;
-    const appProps = { roll: String(roll||''), email: String(email||''), uploadedBy: userEmail, updatedAt: new Date().toISOString() };
-
-    const existing = await findExistingInFolder(drive, { roll, email });
-    const fileMetadata = { name: filename, parents: [DRIVE_PARENT_FOLDER_ID], appProperties: appProps, mimeType: 'application/json' };
-    const media = { mimeType: 'application/json', body: JSON.stringify(portfolio) };
-
-    let fileId = null;
-    if (existing && existing.id) {
-      // Verify ownership before allowing update
-      const existingOwner = existing.appProperties?.uploadedBy || existing.appProperties?.email;
-      if (existingOwner && existingOwner.toLowerCase() !== userEmail.toLowerCase()) {
-        return res.status(403).json({ 
-          error: 'Access denied: Only the file creator can update this portfolio',
-          details: `File belongs to ${existingOwner}, current user is ${userEmail}`
-        });
-      }
-      
-      // Preserve original owner information while updating other properties
-      const preservedProps = {
-        ...appProps,
-        uploadedBy: existing.appProperties?.uploadedBy || userEmail, // Keep original owner
-        createdAt: existing.appProperties?.createdAt || new Date().toISOString() // Preserve creation time if exists
-      };
-      
-      await drive.files.update({ fileId: existing.id, requestBody: { name: filename, appProperties: preservedProps }, media });
-      fileId = existing.id;
-    } else {
-      // Creating new file - set current user as owner
-      const newFileProps = {
-        ...appProps,
-        uploadedBy: userEmail,
-        createdAt: new Date().toISOString()
-      };
-      const newMetadata = { ...fileMetadata, appProperties: newFileProps };
-      
-      const created = await drive.files.create({ requestBody: newMetadata, media, fields: 'id' });
-      fileId = created.data.id;
+    const { roll, email, filename, portfolio, metadata } = req.body || {};
+    
+    // Validate required fields
+    if (!email || !filename || !portfolio) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: email, filename, or portfolio data' 
+      });
     }
-
-    return res.status(200).json({ success: true, fileId });
-  }catch(err){
-    console.error('/api/save error', err);
-    const code = (''+err).includes('Not allowed by CORS') ? 403 : 500;
-    return res.status(code).json({ error: err.message || 'Server error' });
+    
+    // Validate email format and content
+    if (!isValidEmail(email) || !isValidPortfolioData(portfolio)) {
+      return res.status(400).json({ 
+        error: 'Invalid email format or portfolio data' 
+      });
+    }
+    
+    // Multi-user support: Use authenticated user's email instead of portfolio email for ownership
+    // This allows users to save portfolios with any email in the data, but ownership is tied to authenticated user
+    const authenticatedEmail = userEmail.toLowerCase();
+    const portfolioEmail = email.toLowerCase();
+    
+    console.log(`[Save] Authenticated user: ${authenticatedEmail}, Portfolio email: ${portfolioEmail}`);
+    
+    // For security and multi-user support, always use the authenticated user's email for file ownership
+    // But preserve the original email in the portfolio data
+    const ownerEmail = authenticatedEmail;
+    
+    console.log(`[Save] Validated request for authenticated user: ${authenticatedEmail}, portfolio email: ${portfolioEmail}, filename: ${filename}`);
+    
+    const drive = await getDrive();
+    
+    // Step 1: Save to temporary storage in service account drive (use authenticated email for ownership)
+    const tempFileId = await saveToTemporaryStorage(drive, filename, portfolio, ownerEmail, metadata);
+    console.log(`[Save] Saved to temporary storage: ${tempFileId}`);
+    
+    // Step 2: Validate and process the file
+    const validationResult = await validatePortfolioFile(tempFileId, ownerEmail, portfolio);
+    if (!validationResult.isValid) {
+      // Clean up temporary file
+      await cleanupTempFile(drive, tempFileId);
+      return res.status(400).json({ 
+        error: 'Portfolio validation failed: ' + validationResult.error 
+      });
+    }
+    
+    // Step 3: Transfer to final storage (use authenticated email for ownership, preserve portfolio email in data)
+    const finalFileId = await transferToFinalStorage(drive, tempFileId, filename, ownerEmail, portfolio);
+    console.log(`[Save] Transferred to final storage: ${finalFileId}`);
+    
+    // Step 4: Clean up temporary storage
+    await cleanupTempFile(drive, tempFileId);
+    console.log(`[Save] Cleaned up temporary file: ${tempFileId}`);
+    
+    res.json({
+      success: true,
+      fileId: finalFileId,
+      message: 'Portfolio saved successfully',
+      filename: filename + '.json'
+    });
+    
+  } catch (error) {
+    console.error('[Save] Error:', error);
+    
+    // Provide user-friendly error messages
+    if (error.message.includes('quota') || error.message.includes('storage')) {
+      res.status(507).json({
+        error: 'Storage temporarily full. Please contact the administrator.',
+        details: 'The temporary storage is at capacity. This will be resolved shortly.'
+      });
+    } else if (error.message.includes('permissions') || error.message.includes('Access denied') || error.message.includes('Forbidden')) {
+      res.status(403).json({
+        error: 'Access denied. Please ensure you are using the correct account and try again.',
+        details: 'You can only save and update portfolios under your own authenticated account. Each user has their own secure storage space.'
+      });
+    } else if (error.message.includes('authentication') || error.message.includes('token')) {
+      res.status(401).json({
+        error: 'Authentication failed. Please sign in again.',
+        details: 'Your authentication token may have expired. Please refresh the page and sign in again.'
+      });
+    } else if (error.message.includes('validation')) {
+      res.status(400).json({
+        error: 'Portfolio data validation failed.',
+        details: error.message
+      });
+    } else {
+      res.status(500).json({
+        error: 'Internal server error. Please try again later.',
+        details: process.env.NODE_ENV === 'development' ? error.message : 'Contact support if this persists.'
+      });
+    }
   }
 });
 
-// Admin-only list
+// Admin-only list (updated to work with new user-specific folder structure)
 app.get('/api/list', async (req,res)=>{
   try{
     const auth = req.headers['authorization'] || '';
@@ -209,26 +509,355 @@ app.get('/api/list', async (req,res)=>{
 
     const drive = await getDrive();
     await ensureFolderAccessible(drive);
+    
+    // Get final folder ID
+    const finalFolderId = await getOrCreateFolder(drive, FINAL_FOLDER_NAME, DRIVE_PARENT_FOLDER_ID);
+    
+    console.log(`[List] Scanning user folders in: ${finalFolderId}`);
+    
     const items = [];
-    let pageToken = undefined;
-    do{
-      const resp = await drive.files.list({
-        q: `'${DRIVE_PARENT_FOLDER_ID}' in parents and trashed = false`,
-        fields: 'nextPageToken, files(id,name,modifiedTime,appProperties)',
-        pageSize: 200,
-        pageToken
+    
+    // First, get all user folders
+    const userFoldersResp = await drive.files.list({
+      q: `'${finalFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id,name)',
+      pageSize: 100
+    });
+    
+    console.log(`[List] Found ${userFoldersResp.data.files?.length || 0} user folders`);
+    
+    // Scan each user folder for portfolios
+    for (const userFolder of (userFoldersResp.data.files || [])) {
+      try {
+        console.log(`[List] Scanning user folder: ${userFolder.name}`);
+        
+        let pageToken = undefined;
+        do {
+          const resp = await drive.files.list({
+            q: `'${userFolder.id}' in parents and trashed=false and mimeType='application/json'`,
+            fields: 'nextPageToken, files(id,name,modifiedTime,appProperties,size)',
+            pageSize: 100,
+            pageToken,
+            orderBy: 'modifiedTime desc'
+          });
+          
+          (resp.data.files || []).forEach(f => {
+            const props = f.appProperties || {};
+            items.push({
+              id: f.id,
+              file: props.originalFilename || f.name.replace(/\.json$/, ''),
+              name: f.name,
+              roll: props.roll || '',
+              email: props.email || props.userId || '',
+              updatedAt: f.modifiedTime,
+              uploadedBy: props.uploadedBy || props.userId || '',
+              createdAt: props.createdAt || f.modifiedTime,
+              version: props.version || '1.0',
+              size: parseInt(f.size || '0'),
+              userFolder: userFolder.name
+            });
+          });
+          
+          pageToken = resp.data.nextPageToken || undefined;
+        } while (pageToken);
+        
+      } catch (err) {
+        console.warn(`[List] Error scanning folder ${userFolder.name}:`, err.message);
+      }
+    }
+    
+    // Also check for any legacy files directly in the final folder (for backward compatibility)
+    try {
+      const legacyResp = await drive.files.list({
+        q: `'${finalFolderId}' in parents and trashed=false and mimeType='application/json'`,
+        fields: 'files(id,name,modifiedTime,appProperties,size)',
+        pageSize: 100,
+        orderBy: 'modifiedTime desc'
       });
-      (resp.data.files||[]).forEach(f=>{
-        items.push({ id: f.id, file: f.name, roll: f.appProperties?.roll || '', email: f.appProperties?.email || '', updatedAt: f.modifiedTime });
+      
+      (legacyResp.data.files || []).forEach(f => {
+        const props = f.appProperties || {};
+        items.push({
+          id: f.id,
+          file: f.name.replace(/\.json$/, ''),
+          name: f.name,
+          roll: props.roll || '',
+          email: props.email || props.userId || '',
+          updatedAt: f.modifiedTime,
+          uploadedBy: props.uploadedBy || props.userId || '',
+          createdAt: props.createdAt || f.modifiedTime,
+          version: props.version || 'legacy',
+          size: parseInt(f.size || '0'),
+          userFolder: 'legacy'
+        });
       });
-      pageToken = resp.data.nextPageToken || undefined;
-    } while(pageToken);
+      
+      console.log(`[List] Found ${legacyResp.data.files?.length || 0} legacy files`);
+    } catch (err) {
+      console.warn('[List] Error scanning legacy files:', err.message);
+    }
 
+    // Sort by most recent first
+    items.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+    console.log(`[List] Found ${items.length} total portfolios across all user folders`);
     res.status(200).json(items);
   }catch(err){
     console.error('/api/list error', err);
     const code = (''+err).includes('Not allowed by CORS') ? 403 : 500;
     res.status(code).json({ error: err.message || 'Server error' });
+  }
+});
+
+// User-specific portfolio management endpoints
+
+// Get user's own portfolios
+app.get('/api/user-portfolios', async (req, res) => {
+  try {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const { email } = await verifyToken(token);
+    
+    console.log(`[UserPortfolios] Fetching portfolios for user: ${email}`);
+    
+    const drive = await getDrive();
+    await ensureFolderAccessible(drive);
+    
+    // Get final folder and user-specific folder
+    const finalFolderId = await getOrCreateFolder(drive, FINAL_FOLDER_NAME, DRIVE_PARENT_FOLDER_ID);
+    const userFolderName = `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    
+    let userPortfolios = [];
+    
+    try {
+      const userFolderId = await getOrCreateFolder(drive, userFolderName, finalFolderId);
+      
+      const resp = await drive.files.list({
+        q: `'${userFolderId}' in parents and trashed=false and mimeType='application/json'`,
+        fields: 'files(id,name,modifiedTime,appProperties,size)',
+        pageSize: 50,
+        orderBy: 'modifiedTime desc'
+      });
+      
+      userPortfolios = (resp.data.files || []).map(f => {
+        const props = f.appProperties || {};
+        return {
+          id: f.id,
+          filename: props.originalFilename || f.name.replace(/\.json$/, ''),
+          fullName: f.name,
+          roll: props.roll || '',
+          createdAt: props.createdAt || f.modifiedTime,
+          updatedAt: f.modifiedTime,
+          version: props.version || '1.0',
+          size: parseInt(f.size || '0')
+        };
+      });
+      
+    } catch (err) {
+      console.log(`[UserPortfolios] No user folder found or error accessing: ${err.message}`);
+    }
+    
+    console.log(`[UserPortfolios] Found ${userPortfolios.length} portfolios for user: ${email}`);
+    res.json({
+      success: true,
+      portfolios: userPortfolios,
+      userEmail: email
+    });
+    
+  } catch (err) {
+    console.error('[UserPortfolios] Error:', err);
+    res.status(500).json({ 
+      error: 'Failed to fetch user portfolios',
+      details: err.message
+    });
+  }
+});
+
+// Get user's specific portfolio
+app.get('/api/user-portfolio', async (req, res) => {
+  try {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const { email } = await verifyToken(token);
+    
+    const filename = req.query.filename;
+    const fileId = req.query.id;
+    
+    console.log(`[UserPortfolio] Fetching portfolio for user: ${email}, filename: ${filename}, id: ${fileId}`);
+    
+    const drive = await getDrive();
+    await ensureFolderAccessible(drive);
+    
+    let targetFileId = null;
+    
+    if (fileId) {
+      // Verify the file belongs to the user
+      try {
+        const fileMetadata = await drive.files.get({
+          fileId: fileId,
+          fields: 'id,name,appProperties,parents'
+        });
+        
+        const props = fileMetadata.data.appProperties || {};
+        if (props.userId !== email && props.email !== email) {
+          return res.status(403).json({ 
+            error: 'Access denied: This portfolio belongs to another user' 
+          });
+        }
+        
+        targetFileId = fileId;
+      } catch (err) {
+        return res.status(404).json({ 
+          error: 'Portfolio not found or access denied' 
+        });
+      }
+    } else if (filename) {
+      // Search for user's portfolio by filename
+      const finalFolderId = await getOrCreateFolder(drive, FINAL_FOLDER_NAME, DRIVE_PARENT_FOLDER_ID);
+      const userFolderName = `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      
+      try {
+        const userFolderId = await getOrCreateFolder(drive, userFolderName, finalFolderId);
+        
+        const resp = await drive.files.list({
+          q: `'${userFolderId}' in parents and trashed=false and mimeType='application/json'`,
+          fields: 'files(id,name,appProperties)'
+        });
+        
+        const matchingFile = (resp.data.files || []).find(f => {
+          const props = f.appProperties || {};
+          return props.originalFilename === filename;
+        });
+        
+        if (matchingFile) {
+          targetFileId = matchingFile.id;
+        }
+      } catch (err) {
+        console.log(`[UserPortfolio] Error searching user folder: ${err.message}`);
+      }
+    } else {
+      // Get user's most recent portfolio
+      const finalFolderId = await getOrCreateFolder(drive, FINAL_FOLDER_NAME, DRIVE_PARENT_FOLDER_ID);
+      const userFolderName = `user_${email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      
+      try {
+        const userFolderId = await getOrCreateFolder(drive, userFolderName, finalFolderId);
+        
+        const resp = await drive.files.list({
+          q: `'${userFolderId}' in parents and trashed=false and mimeType='application/json'`,
+          fields: 'files(id,name,modifiedTime)',
+          pageSize: 1,
+          orderBy: 'modifiedTime desc'
+        });
+        
+        if (resp.data.files && resp.data.files.length > 0) {
+          targetFileId = resp.data.files[0].id;
+        }
+      } catch (err) {
+        console.log(`[UserPortfolio] Error accessing user folder: ${err.message}`);
+      }
+    }
+    
+    if (!targetFileId) {
+      return res.status(404).json({ 
+        error: 'No portfolio found',
+        suggestion: 'Create your first portfolio by saving one from the portfolio page'
+      });
+    }
+    
+    // Download the portfolio content
+    const resp = await drive.files.get({ 
+      fileId: targetFileId, 
+      alt: 'media' 
+    }, { responseType: 'stream' });
+    
+    let portfolioData = '';
+    resp.data.on('data', chunk => {
+      portfolioData += chunk.toString();
+    });
+    
+    resp.data.on('end', () => {
+      try {
+        const parsedData = JSON.parse(portfolioData);
+        console.log(`[UserPortfolio] Successfully retrieved portfolio for user: ${email}`);
+        res.json(parsedData);
+      } catch (parseErr) {
+        console.error('[UserPortfolio] Error parsing portfolio JSON:', parseErr);
+        res.status(500).json({ 
+          error: 'Portfolio file is corrupted',
+          details: 'Please contact support'
+        });
+      }
+    });
+    
+    resp.data.on('error', (err) => {
+      console.error('[UserPortfolio] Stream error:', err);
+      res.status(500).json({ 
+        error: 'Failed to download portfolio',
+        details: err.message
+      });
+    });
+    
+  } catch (err) {
+    console.error('[UserPortfolio] Error:', err);
+    res.status(500).json({ 
+      error: 'Failed to fetch user portfolio',
+      details: err.message
+    });
+  }
+});
+
+// Delete user's own portfolio
+app.delete('/api/user-portfolio/:id', async (req, res) => {
+  try {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const { email } = await verifyToken(token);
+    
+    const fileId = req.params.id;
+    
+    if (!fileId) {
+      return res.status(400).json({ error: 'File ID is required' });
+    }
+    
+    console.log(`[DeletePortfolio] User ${email} requesting to delete: ${fileId}`);
+    
+    const drive = await getDrive();
+    
+    // Verify ownership before deletion
+    try {
+      const fileMetadata = await drive.files.get({
+        fileId: fileId,
+        fields: 'id,name,appProperties'
+      });
+      
+      const props = fileMetadata.data.appProperties || {};
+      if (props.userId !== email && props.email !== email) {
+        return res.status(403).json({ 
+          error: 'Access denied: You can only delete your own portfolios' 
+        });
+      }
+    } catch (err) {
+      return res.status(404).json({ 
+        error: 'Portfolio not found' 
+      });
+    }
+    
+    // Delete the file
+    await drive.files.delete({ fileId: fileId });
+    
+    console.log(`[DeletePortfolio] Successfully deleted portfolio: ${fileId} for user: ${email}`);
+    res.json({
+      success: true,
+      message: 'Portfolio deleted successfully'
+    });
+    
+  } catch (err) {
+    console.error('[DeletePortfolio] Error:', err);
+    res.status(500).json({ 
+      error: 'Failed to delete portfolio',
+      details: err.message
+    });
   }
 });
 
@@ -421,6 +1050,168 @@ app.get('/api/user-portfolio', async (req,res)=>{
   }
 });
 
+// Admin-only cleanup endpoint for old temporary files
+app.post('/api/cleanup-temp-files', async (req, res) => {
+  try {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const { email } = await verifyToken(token);
+    if (email !== ADMIN_EMAIL) return res.status(403).json({ error: 'Forbidden' });
+
+    const drive = await getDrive();
+    const tempFolderId = await getOrCreateFolder(drive, TEMP_FOLDER_NAME);
+    
+    // Find temp files older than 24 hours
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    const oldFiles = await drive.files.list({
+      q: `'${tempFolderId}' in parents and createdTime < '${oneDayAgo}' and trashed=false`,
+      fields: 'files(id,name,createdTime)',
+      pageSize: 100
+    });
+    
+    let cleanedCount = 0;
+    const errors = [];
+    
+    for (const file of oldFiles.data.files || []) {
+      try {
+        await drive.files.delete({ fileId: file.id });
+        console.log(`[Cleanup] Deleted old temp file: ${file.name}`);
+        cleanedCount++;
+      } catch (error) {
+        console.warn(`[Cleanup] Failed to delete ${file.name}:`, error.message);
+        errors.push(`${file.name}: ${error.message}`);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Cleaned up ${cleanedCount} old temporary files`,
+      cleanedCount,
+      errors: errors.length > 0 ? errors : undefined
+    });
+    
+  } catch (err) {
+    console.error('/api/cleanup-temp-files error', err);
+    res.status(500).json({ error: err.message || 'Cleanup failed' });
+  }
+});
+
+// Admin-only storage monitoring endpoint
+app.get('/api/storage-status', async (req, res) => {
+  try {
+    const auth = req.headers['authorization'] || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    const { email } = await verifyToken(token);
+    if (email !== ADMIN_EMAIL) return res.status(403).json({ error: 'Forbidden' });
+
+    const drive = await getDrive();
+    
+    // Get storage quota information
+    const about = await drive.about.get({
+      fields: 'storageQuota'
+    });
+    
+    const quota = about.data.storageQuota;
+    const usedBytes = parseInt(quota.usage || 0);
+    const limitBytes = parseInt(quota.limit || 0);
+    const usedGB = usedBytes / (1024 ** 3);
+    const limitGB = limitBytes / (1024 ** 3);
+    const usagePercent = limitBytes > 0 ? (usedBytes / limitBytes) * 100 : 0;
+    
+    // Count temporary files
+    const tempFolderId = await getOrCreateFolder(drive, TEMP_FOLDER_NAME);
+    const tempFiles = await drive.files.list({
+      q: `'${tempFolderId}' in parents and trashed=false`,
+      fields: 'files(id)',
+      pageSize: 1000
+    });
+    const tempFileCount = tempFiles.data.files?.length || 0;
+    
+    // Count final files and user statistics
+    const finalFolderId = await getOrCreateFolder(drive, FINAL_FOLDER_NAME, DRIVE_PARENT_FOLDER_ID);
+    
+    // Get user folders
+    const userFoldersResp = await drive.files.list({
+      q: `'${finalFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id,name)',
+      pageSize: 100
+    });
+    
+    const userFolders = userFoldersResp.data.files || [];
+    let totalUserPortfolios = 0;
+    let userStats = [];
+    
+    // Count portfolios per user
+    for (const folder of userFolders) {
+      try {
+        const userPortfolios = await drive.files.list({
+          q: `'${folder.id}' in parents and trashed=false and mimeType='application/json'`,
+          fields: 'files(id)',
+          pageSize: 100
+        });
+        const count = userPortfolios.data.files?.length || 0;
+        totalUserPortfolios += count;
+        
+        const userEmail = folder.name.replace('user_', '').replace(/_/g, '.');
+        userStats.push({
+          userFolder: folder.name,
+          email: userEmail,
+          portfolioCount: count
+        });
+      } catch (err) {
+        console.warn(`[Storage] Error counting portfolios for ${folder.name}:`, err.message);
+      }
+    }
+    
+    // Count legacy files (directly in final folder)
+    const legacyFiles = await drive.files.list({
+      q: `'${finalFolderId}' in parents and trashed=false and mimeType='application/json'`,
+      fields: 'files(id)',
+      pageSize: 1000
+    });
+    const legacyFileCount = legacyFiles.data.files?.length || 0;
+    
+    const finalFileCount = totalUserPortfolios + legacyFileCount;
+    
+    const status = {
+      storage: {
+        usedGB: parseFloat(usedGB.toFixed(2)),
+        limitGB: parseFloat(limitGB.toFixed(2)),
+        usagePercent: parseFloat(usagePercent.toFixed(1)),
+        isNearLimit: usagePercent > 80
+      },
+      files: {
+        temporary: tempFileCount,
+        final: finalFileCount,
+        userPortfolios: totalUserPortfolios,
+        legacyFiles: legacyFileCount,
+        total: tempFileCount + finalFileCount
+      },
+      users: {
+        totalUsers: userFolders.length,
+        activeUsers: userStats.filter(u => u.portfolioCount > 0).length,
+        userStats: userStats.sort((a, b) => b.portfolioCount - a.portfolioCount)
+      },
+      folders: {
+        tempFolderId,
+        finalFolderId,
+        parentFolderId: DRIVE_PARENT_FOLDER_ID,
+        userFolderCount: userFolders.length
+      },
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log(`[Storage] Usage: ${usedGB.toFixed(2)}GB / ${limitGB.toFixed(2)}GB (${usagePercent.toFixed(1)}%)`);
+    
+    res.json(status);
+    
+  } catch (err) {
+    console.error('/api/storage-status error', err);
+    res.status(500).json({ error: err.message || 'Failed to get storage status' });
+  }
+});
+
 // Stubs for future Python jobs
 app.post('/api/run-json2excel', async (req,res)=>{
   return res.status(501).json({ error: 'Not implemented' });
@@ -428,4 +1219,6 @@ app.post('/api/run-json2excel', async (req,res)=>{
 
 app.listen(PORT, ()=>{
   console.log(`RMU backend listening on ${PORT}`);
+  console.log(`Configured folders: temp="${TEMP_FOLDER_NAME}", final="${FINAL_FOLDER_NAME}"`);
+  console.log(`Parent folder ID: ${DRIVE_PARENT_FOLDER_ID}`);
 });

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMU Portfolio Backend Monitor</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .status-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .status-card h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-online { background-color: #28a745; }
+        .status-offline { background-color: #dc3545; }
+        .status-warning { background-color: #ffc107; }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #007bff;
+            transition: width 0.3s ease;
+        }
+        .progress-warning { background-color: #ffc107; }
+        .progress-danger { background-color: #dc3545; }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .cleanup-btn {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .cleanup-btn:hover {
+            background-color: #e0a800;
+        }
+        .logs {
+            background: #212529;
+            color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+        }
+        .log-error { color: #ff6b6b; }
+        .log-success { color: #51cf66; }
+        .log-warning { color: #ffd43b; }
+        .config-section {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .config-input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        .file-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            background: white;
+        }
+        .file-item {
+            padding: 5px 0;
+            border-bottom: 1px solid #f1f3f4;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 RMU Portfolio Backend Monitor</h1>
+        
+        <div class="config-section">
+            <h3>Backend Configuration</h3>
+            <input type="text" id="backendUrl" class="config-input" 
+                   placeholder="Backend URL (e.g., https://your-backend.com)" 
+                   value="">
+            <input type="text" id="adminToken" class="config-input" 
+                   placeholder="Admin JWT Token" 
+                   value="">
+        </div>
+
+        <div class="controls">
+            <button onclick="checkHealth()">🔄 Check Health</button>
+            <button onclick="getStorageStatus()">📊 Storage Status</button>
+            <button onclick="listPortfolios()">📁 List Portfolios</button>
+            <button onclick="runCleanup()" class="cleanup-btn">🧹 Run Cleanup</button>
+            <button onclick="clearLogs()">🗑️ Clear Logs</button>
+        </div>
+
+        <div class="status-grid">
+            <div class="status-card">
+                <h3>
+                    <span id="healthStatus" class="status-indicator status-offline"></span>
+                    Backend Health
+                </h3>
+                <div id="healthInfo">Not checked yet</div>
+            </div>
+
+            <div class="status-card">
+                <h3>
+                    <span id="storageStatus" class="status-indicator status-offline"></span>
+                    Storage Usage
+                </h3>
+                <div id="storageInfo">Not checked yet</div>
+                <div class="progress-bar">
+                    <div id="storageProgress" class="progress-fill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>Portfolio Files</h3>
+                <div id="fileInfo">
+                    <div>Temporary: <span id="tempFiles">-</span></div>
+                    <div>Final: <span id="finalFiles">-</span></div>
+                    <div>Total: <span id="totalFiles">-</span></div>
+                </div>
+            </div>
+
+            <div class="status-card">
+                <h3>Recent Portfolios</h3>
+                <div id="recentPortfolios" class="file-list">
+                    No portfolios loaded yet
+                </div>
+            </div>
+        </div>
+
+        <div class="logs" id="logs">
+            <div class="log-entry">Monitor initialized. Configure backend URL and admin token above.</div>
+        </div>
+    </div>
+
+    <script>
+        let backendUrl = '';
+        let adminToken = '';
+
+        // Load config from localStorage
+        document.getElementById('backendUrl').value = localStorage.getItem('backendUrl') || '';
+        document.getElementById('adminToken').value = localStorage.getItem('adminToken') || '';
+
+        // Save config when changed
+        document.getElementById('backendUrl').addEventListener('change', (e) => {
+            backendUrl = e.target.value;
+            localStorage.setItem('backendUrl', backendUrl);
+            log(`Backend URL updated: ${backendUrl}`, 'success');
+        });
+
+        document.getElementById('adminToken').addEventListener('change', (e) => {
+            adminToken = e.target.value;
+            localStorage.setItem('adminToken', adminToken);
+            log('Admin token updated', 'success');
+        });
+
+        // Initialize
+        backendUrl = document.getElementById('backendUrl').value;
+        adminToken = document.getElementById('adminToken').value;
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const timestamp = new Date().toLocaleTimeString();
+            const logClass = type === 'error' ? 'log-error' : 
+                            type === 'success' ? 'log-success' : 
+                            type === 'warning' ? 'log-warning' : '';
+            
+            logs.innerHTML += `<div class="log-entry ${logClass}">[${timestamp}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        async function makeRequest(endpoint, options = {}) {
+            if (!backendUrl) {
+                log('Please configure backend URL first', 'error');
+                return null;
+            }
+
+            try {
+                const url = backendUrl + endpoint;
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                };
+
+                if (adminToken && (endpoint.includes('/api/') || endpoint.includes('/admin'))) {
+                    headers['Authorization'] = `Bearer ${adminToken}`;
+                }
+
+                const response = await fetch(url, {
+                    ...options,
+                    headers
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                log(`Request failed: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        async function checkHealth() {
+            log('Checking backend health...');
+            
+            // Check basic health endpoint
+            const health = await makeRequest('/healthz');
+            if (health) {
+                document.getElementById('healthStatus').className = 'status-indicator status-online';
+                document.getElementById('healthInfo').innerHTML = `
+                    <div>Status: ${health.status}</div>
+                    <div>Version: ${health.version || 'Unknown'}</div>
+                    <div>Timestamp: ${new Date(health.timestamp).toLocaleString()}</div>
+                `;
+                log('Backend is online', 'success');
+            } else {
+                document.getElementById('healthStatus').className = 'status-indicator status-offline';
+                document.getElementById('healthInfo').innerHTML = 'Backend is offline';
+            }
+        }
+
+        async function getStorageStatus() {
+            log('Checking storage status...');
+            
+            const status = await makeRequest('/api/storage-status');
+            if (status && status.storage) {
+                const { storage, files } = status;
+                const usagePercent = storage.usagePercent || 0;
+                
+                // Update storage indicator
+                const statusClass = usagePercent > 90 ? 'status-offline' : 
+                                  usagePercent > 70 ? 'status-warning' : 'status-online';
+                document.getElementById('storageStatus').className = `status-indicator ${statusClass}`;
+                
+                // Update storage info
+                document.getElementById('storageInfo').innerHTML = `
+                    <div>Used: ${storage.usedGB || 0} GB / ${storage.limitGB || 15} GB</div>
+                    <div>Usage: ${usagePercent.toFixed(1)}%</div>
+                `;
+                
+                // Update progress bar
+                const progressBar = document.getElementById('storageProgress');
+                progressBar.style.width = `${usagePercent}%`;
+                progressBar.className = 'progress-fill' + 
+                    (usagePercent > 90 ? ' progress-danger' : 
+                     usagePercent > 70 ? ' progress-warning' : '');
+                
+                // Update file counts
+                document.getElementById('tempFiles').textContent = files.temporary || 0;
+                document.getElementById('finalFiles').textContent = files.final || 0;
+                document.getElementById('totalFiles').textContent = files.total || 0;
+                
+                log(`Storage: ${usagePercent.toFixed(1)}% used (${files.temporary || 0} temp, ${files.final || 0} final)`, 
+                    usagePercent > 90 ? 'warning' : 'success');
+            }
+        }
+
+        async function listPortfolios() {
+            log('Loading portfolio list...');
+            
+            const portfolios = await makeRequest('/api/list');
+            if (portfolios && portfolios.length > 0) {
+                const recentList = portfolios.slice(0, 10); // Show recent 10
+                const html = recentList.map(p => `
+                    <div class="file-item">
+                        <strong>${p.name}</strong><br>
+                        <small>Modified: ${new Date(p.modifiedTime).toLocaleString()}</small><br>
+                        <small>Size: ${(p.size / 1024).toFixed(1)} KB</small>
+                    </div>
+                `).join('');
+                
+                document.getElementById('recentPortfolios').innerHTML = html;
+                log(`Found ${portfolios.length} portfolios`, 'success');
+            } else {
+                document.getElementById('recentPortfolios').innerHTML = 'No portfolios found';
+                log('No portfolios found', 'warning');
+            }
+        }
+
+        async function runCleanup() {
+            if (!confirm('Run cleanup of temporary files? This will delete old temporary files.')) {
+                return;
+            }
+            
+            log('Running cleanup...');
+            const result = await makeRequest('/api/cleanup-temp-files', { method: 'POST' });
+            
+            if (result) {
+                log(`Cleanup completed: ${result.deletedCount || 0} files deleted, ${(result.spaceSaved || 0).toFixed(2)} MB saved`, 'success');
+                // Refresh storage status after cleanup
+                setTimeout(getStorageStatus, 1000);
+            }
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(() => {
+            if (backendUrl) {
+                checkHealth();
+                getStorageStatus();
+            }
+        }, 30000);
+
+        // Initial check if URL is configured
+        if (document.getElementById('backendUrl').value) {
+            setTimeout(() => {
+                checkHealth();
+                getStorageStatus();
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

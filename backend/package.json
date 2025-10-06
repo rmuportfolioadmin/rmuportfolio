@@ -6,7 +6,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "cleanup": "node cleanup-script.js cleanup",
+    "monitor": "node cleanup-script.js monitor",
+    "maintenance": "node cleanup-script.js both"
   },
   "engines": {
     "node": ">=20"
