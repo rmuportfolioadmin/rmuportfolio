@@ -1063,6 +1063,11 @@ function initializeGisAndGapi() {
             gapi.client.setToken({access_token: accessToken});
             console.log('Access token set on gapi.client - User authenticated with appDataFolder scope');
             updateAuthUIStateGIS(true);
+            // Persist minimal user-mode context so Drive features remain active across reloads
+            try {
+                sessionStorage.setItem('userToken', accessToken);
+                sessionStorage.setItem('isUserMode', 'true');
+            } catch(e) { console.warn('Could not persist user token to sessionStorage', e); }
             
             // Automatically load user's portfolio data from their private appDataFolder
             try {

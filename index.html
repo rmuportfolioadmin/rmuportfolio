@@ -116,7 +116,7 @@
       </div>
       <div id="welcome-error" class="admin-error" style="display:none;"></div>
       <p class="welcome-desc">
-        Your digital academic portfolio is ready to explore. Sign in with Google to access your personal data and sync across devices, or continue without signing in to view the demo portfolio. <small style="display:block;margin-top:8px;opacity:0.7;">Note: Google authentication is being updated to comply with new security requirements.</small>
+        Your digital academic portfolio is ready to explore. Sign in with Google to access your personal data and sync across devices, or continue without signing in to view the demo portfolio. <small style="display:block;margin-top:8px;opacity:0.7;">Note: This site uses Google Sign‑In provided by RMU. If sign‑in isn’t available due to updates, you can continue without signing in.</small>
       </p>
       <div class="welcome-actions">
         <button id="welcome-signin" class="welcome-btn welcome-btn-primary">
@@ -650,6 +650,9 @@
         row.setAttribute('data-file-id', portfolio.id);
         row.setAttribute('data-filename', portfolio.file);
         row.setAttribute('data-source', portfolio.source);
+        // Store extra searchable fields to improve search coverage for remote items
+        if (portfolio.roll) row.setAttribute('data-roll', portfolio.roll);
+        if (portfolio.email) row.setAttribute('data-email', portfolio.email);
         
         // Extract name from filename or use roll/email
         const displayName = extractDisplayName(portfolio.file, portfolio.roll, portfolio.email);
@@ -713,7 +716,11 @@
       rows.forEach(row => {
         const name = row.querySelector('.gal-name')?.textContent || '';
         const meta = row.querySelector('.gal-meta')?.textContent || '';
-        const searchText = (name + ' ' + meta).toLowerCase();
+        const filename = row.getAttribute('data-filename') || '';
+        const roll = row.getAttribute('data-roll') || '';
+        const email = row.getAttribute('data-email') || '';
+        // Search across all visible text plus hidden attributes for both local and remote
+        const searchText = (name + ' ' + meta + ' ' + filename + ' ' + roll + ' ' + email).toLowerCase();
         const matches = !query || searchText.includes(query.toLowerCase());
         
         row.style.display = matches ? 'flex' : 'none';
@@ -725,6 +732,14 @@
     
     async function loadPortfolioAdmin(portfolio) {
       try {
+        // Prevent multiple clicks while loading
+        if (window.__ADMIN_PORTFOLIO_OPENING) return;
+        window.__ADMIN_PORTFOLIO_OPENING = true;
+        try{
+          if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = 'none';
+          if (elements.searchBox) elements.searchBox.disabled = true;
+          document.body.classList.add('admin-loading');
+        }catch(_){ }
         setStatus(`Loading ${portfolio.file}...`);
         
         if(portfolio.source === 'local') {
@@ -733,6 +748,13 @@
           const url = `portfolio.html?file=${encodeURIComponent(localPath)}&admin=1`;
           window.open(url, '_blank');
           setStatus('Local portfolio opened in new tab');
+          // Re-enable UI immediately for local open
+          try{
+            if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = '';
+            if (elements.searchBox) elements.searchBox.disabled = false;
+          }catch(_){ }
+          window.__ADMIN_PORTFOLIO_OPENING = false;
+          document.body.classList.remove('admin-loading');
           
         } else if(portfolio.source === 'remote') {
           // Load remote portfolio from backend
@@ -790,6 +812,13 @@
                 console.log('[Admin] Portfolio data delivery confirmed');
                 messagingActive = false;
                 window.removeEventListener('message', messageListener);
+                // Re-enable clicks after the new tab confirms receipt
+                try{
+                  if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = '';
+                  if (elements.searchBox) elements.searchBox.disabled = false;
+                }catch(_){ }
+                window.__ADMIN_PORTFOLIO_OPENING = false;
+                document.body.classList.remove('admin-loading');
               }
             };
             window.addEventListener('message', messageListener);
@@ -821,6 +850,13 @@
             setTimeout(() => {
               messagingActive = false;
               window.removeEventListener('message', messageListener);
+              // Safety re-enable after timeout
+              try{
+                if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = '';
+                if (elements.searchBox) elements.searchBox.disabled = false;
+              }catch(_){ }
+              window.__ADMIN_PORTFOLIO_OPENING = false;
+              document.body.classList.remove('admin-loading');
             }, 20000);
           }
           
@@ -830,6 +866,13 @@
       } catch(err) {
         console.error('Load portfolio error:', err);
         setStatus('Failed to load portfolio: ' + (err.message || err));
+        // Ensure UI is re-enabled on error
+        try{
+          if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = '';
+          if (elements.searchBox) elements.searchBox.disabled = false;
+        }catch(_){ }
+        window.__ADMIN_PORTFOLIO_OPENING = false;
+        document.body.classList.remove('admin-loading');
       }
     }
     
@@ -948,6 +991,16 @@
       // Pre-load the first portfolio in background
       loadDefaultPortfolioInBackground();
       
+      // If redirected from portfolio page requesting sign-in, auto-trigger sign-in flow
+      try {
+        const qp = new URLSearchParams(location.search);
+        if (qp.get('signin') === '1') {
+          showWelcomeOverlay(true);
+          blurPortfolio(true);
+          setTimeout(() => elements.welcomeSignin?.click(), 200);
+        }
+      } catch(_) {}
+
       // Check if already signed in
       if(window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
         const email = RMU_AUTH.getCurrentUserEmail();
