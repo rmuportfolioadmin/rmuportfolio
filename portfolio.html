@@ -183,6 +183,55 @@
                 }
             }
         });
+        
+        // Check for user data from sessionStorage (when navigated from index.html)
+        function checkUserMode() {
+            try {
+                const isUserMode = sessionStorage.getItem('isUserMode');
+                const userToken = sessionStorage.getItem('userToken');
+                const userEmail = sessionStorage.getItem('userEmail');
+                const userPortfolioData = sessionStorage.getItem('userPortfolioData');
+                
+                if(isUserMode === 'true' && userEmail) {
+                    console.log('[Portfolio] User mode detected:', userEmail);
+                    
+                    // Store user credentials globally for Drive operations
+                    window.__USER_EMAIL = userEmail;
+                    window.__USER_TOKEN = userToken;
+                    window.__IS_USER_MODE = true;
+                    
+                    // Authentication will be set up by initializeGisAndGapi when gapi loads
+                    
+                    // If we have portfolio data from Drive, use it
+                    if(userPortfolioData) {
+                        try {
+                            const portfolioData = JSON.parse(userPortfolioData);
+                            window.__USER_PORTFOLIO_DATA = portfolioData;
+                            console.log('[Portfolio] User portfolio data loaded from sessionStorage');
+                        } catch(e) {
+                            console.error('[Portfolio] Failed to parse user portfolio data:', e);
+                        }
+                    }
+                    
+                    // Enable user authentication UI
+                    document.body.classList.add('user-authenticated');
+                    document.body.classList.add('signed-in'); // Show save-to-server and other auth-required buttons
+                    
+                    // Clean up sessionStorage to prevent conflicts
+                    try {
+                        sessionStorage.removeItem('userPortfolioData');
+                    } catch(e) {
+                        console.warn('[Portfolio] Could not clean sessionStorage:', e);
+                    }
+                }
+            } catch(e) {
+                console.warn('[Portfolio] Error checking user mode:', e);
+            }
+        }
+        
+        // Check immediately and after DOM loads
+        checkUserMode();
+        document.addEventListener('DOMContentLoaded', checkUserMode);
     })();
     </script>
     <script>
@@ -962,7 +1011,22 @@ function gisHandleResponse(resp) {
 }
 
 function initializeGisAndGapi() {
-    // create the token client
+    // Check for existing user token from sessionStorage (user mode from index.html)
+    const existingUserToken = sessionStorage.getItem('userToken');
+    const isUserMode = sessionStorage.getItem('isUserMode');
+    
+    if(isUserMode === 'true' && existingUserToken) {
+        console.log('[Auth] User mode detected with existing token');
+        // Set up authentication with existing token
+        accessToken = existingUserToken;
+        gapi.client.setToken({access_token: accessToken});
+        window.accessToken = accessToken;
+        updateAuthUIStateGIS(true);
+        console.log('[Auth] User token from sessionStorage set on gapi.client');
+        return; // Don't set up interactive auth for user mode
+    }
+
+    // create the token client for interactive authentication
     tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,

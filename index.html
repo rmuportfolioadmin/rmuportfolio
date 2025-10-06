@@ -842,13 +842,13 @@
         const backendBase = (config.BACKEND_BASE || '').replace(/\/$/, '');
         
         if(!backendBase) {
-          console.log('Backend not configured, loading default portfolio');
+          console.log('[User] Backend not configured, loading default portfolio');
           await loadDefaultPortfolio();
           return;
         }
         
         // Try to fetch user's portfolio from their Drive appData
-        console.log(`Loading portfolio for user: ${email}`);
+        console.log(`[User] Loading portfolio for user: ${email}`);
         setStatus('Loading your portfolio from Google Drive...');
         
         const response = await fetch(`${backendBase}/api/user-portfolio`, {
@@ -863,28 +863,43 @@
         
         if(response.ok) {
           const portfolioData = await response.json();
+          console.log('[User] Successfully loaded portfolio from Drive');
           
-          // Open portfolio with user data
-          const portfolioWindow = window.open('portfolio.html?user=1&drive=1', '_self');
+          // Store user data for the portfolio page
+          try {
+            sessionStorage.setItem('userPortfolioData', JSON.stringify(portfolioData));
+            sessionStorage.setItem('userEmail', email);
+            sessionStorage.setItem('userToken', token);
+            sessionStorage.setItem('isUserMode', 'true');
+          } catch(e) {
+            console.warn('[User] Could not store data in sessionStorage:', e);
+          }
           
-          // Pass the data to the window
-          setTimeout(() => {
-            window.postMessage({
-              type: 'user-portfolio-data',
-              data: portfolioData,
-              email: email,
-              source: 'drive'
-            }, '*');
-          }, 100);
+          // Navigate to portfolio page with user context
+          window.location.href = 'portfolio.html?user=1&drive=1&welcome=1';
+          
+        } else if(response.status === 404) {
+          console.log('[User] User portfolio not found in Drive, loading default with sign-in enabled');
+          
+          // Store user credentials for portfolio page to enable Drive features
+          try {
+            sessionStorage.setItem('userEmail', email);
+            sessionStorage.setItem('userToken', token);
+            sessionStorage.setItem('isUserMode', 'true');
+          } catch(e) {
+            console.warn('[User] Could not store credentials:', e);
+          }
+          
+          // Load default portfolio but with user signed in
+          window.location.href = 'portfolio.html?file=./portfolio-data.json&user=1&welcome=1';
           
         } else {
-          console.log('User portfolio not found in Drive, loading default');
-          await loadDefaultPortfolio();
+          throw new Error(`Backend error: ${response.status}`);
         }
         
       } catch(err) {
-        console.error('Error loading user portfolio from Drive:', err);
-        console.log('Falling back to default portfolio');
+        console.error('[User] Error loading user portfolio from Drive:', err);
+        console.log('[User] Falling back to default portfolio');
         await loadDefaultPortfolio();
       }
     }

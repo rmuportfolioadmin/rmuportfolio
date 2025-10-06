@@ -1056,8 +1056,65 @@ class PortfolioApp {
       }
     }
 
-  
-  
+    // Load user portfolio data (similar to loadDataDirectly but for user mode)
+    loadUserPortfolioData(portfolioData) {
+      try {
+        console.log('[loadUserPortfolioData] Loading user portfolio data from Drive');
+        
+        // Normalize the data
+        const normalizedData = this.normalizeLoadedData(portfolioData || {});
+        
+        // Clear previous state
+        this.achievements = [];
+        this.reflections = [];
+        
+        // Load the data
+        this.achievements = normalizedData.achievements || [];
+        this.reflections = normalizedData.reflections || [];
+        
+        // Set personal info and photo
+        if(normalizedData.personalInfo) {
+          try {
+            localStorage.setItem('personalInfo', JSON.stringify(normalizedData.personalInfo));
+          } catch(e) {
+            console.warn('[loadUserPortfolioData] Could not save personalInfo to localStorage:', e);
+          }
+        }
+        
+        if(normalizedData.profilePhoto) {
+          try {
+            localStorage.setItem('profilePhoto', normalizedData.profilePhoto);
+          } catch(e) {
+            console.warn('[loadUserPortfolioData] Could not save profilePhoto to localStorage:', e);
+          }
+        } else {
+          try {
+            localStorage.removeItem('profilePhoto');
+          } catch(e) {
+            console.warn('[loadUserPortfolioData] Could not remove profilePhoto from localStorage:', e);
+          }
+        }
+        
+        // Render everything
+        this.loadPersonalInfo();
+        this.renderAchievements();
+        this.renderReflections();
+        this.updateLinkedAchievements();
+        
+        // Show sections
+        document.querySelectorAll('#personal.section, #descriptive.section, #reflective.section').forEach(section => {
+          section.style.visibility = 'visible';
+        });
+        
+        // Remove loading state
+        document.body.classList.remove('loading-initial');
+        
+        console.log('[loadUserPortfolioData] Successfully loaded user portfolio data from Drive');
+        
+      } catch(err) {
+        console.error('[loadUserPortfolioData] Failed to load user data:', err);
+      }
+    }
 
   // Helper: returns currently selected descriptive category ('' means all)
   getActiveDescriptiveCategory() {
@@ -2908,6 +2965,18 @@ if (window.__ADMIN_PORTFOLIO_DATA) {
     window.__ADMIN_FILENAME = null;
   } catch(err) {
     console.error('[Portfolio] Failed to load admin portfolio data:', err);
+  }
+}
+
+// Check if user portfolio data was received before app initialization
+if (window.__USER_PORTFOLIO_DATA) {
+  console.log('[Portfolio] Loading user portfolio data that was received earlier');
+  try {
+    app.loadUserPortfolioData(window.__USER_PORTFOLIO_DATA);
+    // Clear the stored data
+    window.__USER_PORTFOLIO_DATA = null;
+  } catch(err) {
+    console.error('[Portfolio] Failed to load user portfolio data:', err);
   }
 }
 
