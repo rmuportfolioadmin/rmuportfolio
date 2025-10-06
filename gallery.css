@@ -244,6 +244,7 @@ body {
 }
 
 /* Utility hidden */
-.hidden { display:none !important; }
+/* Strongest possible selector to hide admin rows regardless of other rules */
+.gal-grid .gal-row.hidden, .admin-mode .gal-row.hidden { display: none !important; }
 /* Ensure hidden rows are not displayed in admin-mode styling */
 .admin-mode .gal-row.hidden { display: none !important; }
