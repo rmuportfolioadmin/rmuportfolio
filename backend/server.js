@@ -18,12 +18,19 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '5mb' }));
 
-// Strict CORS
+// Strict CORS (allow configured origin; also allow GitHub Pages domain root when ORIGIN is a subpath)
 app.use(cors({
   origin: function(origin, cb){
-    // Allow same-origin (no origin header) and exact ORIGIN
-    if (!origin) return cb(null, true);
-    if (origin === ORIGIN) return cb(null, true);
+    try{
+      if (!origin) return cb(null, true);
+      if (origin === ORIGIN) return cb(null, true);
+      // Allow GitHub Pages org root if ORIGIN is a specific page path
+      if (ORIGIN && ORIGIN.startsWith('https://') && ORIGIN.includes('github.io')){
+        const root = ORIGIN.split('://')[1].split('/')[0];
+        const allowed = `https://${root}`;
+        if (origin === allowed) return cb(null, true);
+      }
+    }catch(_){ }
     return cb(new Error('Not allowed by CORS'));
   },
   methods: ['GET','POST','OPTIONS'],
@@ -368,28 +375,39 @@ app.get('/api/user-portfolio', async (req,res)=>{
       auth: oauth2Client
     });
     
-    // Search for portfolio.json in user's appdata folder
-    const searchResp = await drive.files.list({
-      q: "name='portfolio.json' and parents in 'appDataFolder'",
+    // Search for portfolio-data.json (preferred) in user's appDataFolder, fallback to portfolio.json
+    let file = null;
+    const searchPrimary = await drive.files.list({
+      q: "name='portfolio-data.json' and parents in 'appDataFolder' and trashed=false",
       spaces: 'appDataFolder',
-      fields: 'files(id,name,modifiedTime)'
+      fields: 'files(id,name,modifiedTime)',
+      pageSize: 1
     });
-    
-    if(!searchResp.data.files || searchResp.data.files.length === 0) {
+    if (searchPrimary.data.files && searchPrimary.data.files.length) {
+      file = searchPrimary.data.files[0];
+    } else {
+      const searchFallback = await drive.files.list({
+        q: "name='portfolio.json' and parents in 'appDataFolder' and trashed=false",
+        spaces: 'appDataFolder',
+        fields: 'files(id,name,modifiedTime)',
+        pageSize: 1
+      });
+      if (searchFallback.data.files && searchFallback.data.files.length) {
+        file = searchFallback.data.files[0];
+      }
+    }
+
+    if(!file) {
       console.log(`[user-portfolio] No portfolio found in appdata for ${email}`);
       return res.status(404).json({ error: 'No portfolio found in your Drive' });
     }
-    
-    const file = searchResp.data.files[0];
     console.log(`[user-portfolio] Found portfolio file:`, file.name, file.id);
     
     // Download the file content
-    const downloadResp = await drive.files.get({
-      fileId: file.id,
-      alt: 'media'
-    });
-    
-    const portfolioData = JSON.parse(downloadResp.data);
+    const downloadResp = await drive.files.get({ fileId: file.id, alt: 'media' });
+    // googleapis returns object when not streaming; handle both string/object safely
+    const raw = downloadResp.data;
+    const portfolioData = (typeof raw === 'string') ? JSON.parse(raw) : raw;
     console.log(`[user-portfolio] Successfully loaded portfolio for ${email}`);
     
     res.status(200).json(portfolioData);

@@ -505,7 +505,8 @@
                   roll: item.roll || '',
                   email: item.email || '',
                   updatedAt: item.updatedAt || 'Unknown',
-                  source: 'drive',
+                  // Use 'remote' to align with UI logic
+                  source: 'remote',
                   driveId: item.id
                 }));
                 console.log(`[Admin] Loaded ${remotePortfolios.length} portfolios from Google Drive`);
