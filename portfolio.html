@@ -1441,109 +1441,89 @@ window.addEventListener('load', () => {
         try {
             const cfg = window.RMU_CONFIG || {};
             const base = (cfg.BACKEND_BASE || '').replace(/\/$/, '');
-            
-            if(!base) {
-                throw new Error('Backend not configured. Please check config.js');
-            }
-            
-            if(!window.app) {
-                throw new Error('Portfolio not initialized');
-            }
-            
+
+            if (!base) throw new Error('Backend not configured. Please check config.js');
+            if (!window.app) throw new Error('Portfolio not initialized');
+
             showSaveModal(true, 'Preparing portfolio data...');
-            
-            // Build payload
-            const personal = JSON.parse(localStorage.getItem('personalInfo') || '{}');
-            
-            // Determine email from RMU_AUTH or gapi
-            let email = personal.email || '';
-            if (window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
-                email = RMU_AUTH.getCurrentUserEmail() || email;
-            } else if(typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
-                const authInstance = gapi.auth2.getAuthInstance();
-                const user = authInstance.currentUser.get();
-                if(user && user.isSignedIn()) {
-                    const profile = user.getBasicProfile();
-                    email = profile.getEmail() || email;
-                }
-            }
-            
-            const roll = personal.rollNo || personal.roll || '';
-            
-            // Generate standardized filename using student name and roll number
-            console.log('[Save] Generating filename from personal info:', personal);
-            
-            const studentName = personal.studentName || personal.fullName || 
-                              [personal.firstName, personal.lastName].filter(Boolean).join(' ') || '';
-            const rollNo = personal.rollNo || personal.roll || roll || '';
-            
-            console.log('[Save] Using studentName:', studentName, 'rollNo:', rollNo);
-            
-            let filename;
-            if (studentName && rollNo) {
-                // Both name and roll available - ideal format
-                const cleanName = studentName.replace(/[^A-Za-z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
-                const cleanRoll = rollNo.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
-                filename = `${cleanName}-${cleanRoll}`;
-                console.log('[Save] ✅ Generated full filename:', filename);
-            } else if (studentName) {
-                // Only name available
-                const cleanName = studentName.replace(/[^A-Za-z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
-                filename = `${cleanName}-portfolio`;
-                console.log('[Save] ⚠️ Generated name-only filename:', filename);
-            } else {
-                // Fallback to email-based naming
-                const emailBase = email ? email.split('@')[0] : 'unknown-user';
-                filename = rollNo ? `student-${rollNo}` : `user-${emailBase}`;
-                console.log('[Save] 🔄 Using fallback filename:', filename);
-            }
-            
-            const payload = {
-                roll: roll,
-                email: email,
-                filename: filename,
-                portfolio: {
-                    achievements: app.achievements || [],
-                    reflections: app.reflections || [],
-                    personalInfo: personal,
-                    profilePhoto: localStorage.getItem('profilePhoto') || null
-                }
+
+            // Helpers
+            const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim());
+            const sanitizeFilename = (s) => {
+                const cleaned = String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9\-_. ]/g,'-').replace(/\s+/g,'-').replace(/-+/g,'-').replace(/^[-.]+|[-.]+$/g,'');
+                return cleaned.slice(0, 80) || 'portfolio';
             };
-            
-            showSaveModal(true, 'Saving to server...');
-            
-            // Get backend auth token: prefer RMU_AUTH token, else gapi id_token
-            let idToken = null;
-            if (window.__USER_TOKEN) {
-                idToken = window.__USER_TOKEN; // RMU backend expects Bearer access token
+
+            // Gather personal info and compute email robustly
+            const personal = (() => { try { return JSON.parse(localStorage.getItem('personalInfo')||'{}'); } catch(_) { return {}; } })();
+            const emailCandidates = [
+                personal.email,
+                window.RMU_AUTH?.getCurrentUserEmail?.(),
+                window.__USER_EMAIL,
+                (()=>{ try { return sessionStorage.getItem('userEmail'); } catch(_) { return null; } })()
+            ].filter(Boolean);
+            const email = (emailCandidates.find(isValidEmail) || '').toLowerCase();
+            if (!email) {
+                throw new Error('No valid email found. Please sign in and ensure your email is set in Personal Info.');
             }
-            if(!idToken && window.RMU_AUTH && typeof RMU_AUTH.getIdToken === 'function') {
+
+            // Roll number for metadata/filename
+            const roll = personal.rollNo || personal.roll || '';
+
+            // Derive a stable filename
+            const studentName = personal.studentName || personal.fullName || [personal.firstName, personal.lastName].filter(Boolean).join(' ') || '';
+            const rollNo = roll || '';
+            let filename;
+            if (studentName && rollNo) filename = `${studentName}-${rollNo}`; else if (studentName) filename = `${studentName}-portfolio`; else filename = `user-${email.split('@')[0]}`;
+            filename = sanitizeFilename(filename.toLowerCase());
+
+            // Normalize portfolio payload shape expected by backend
+            const achievements = Array.isArray(app.achievements) ? app.achievements : [];
+            const reflections = Array.isArray(app.reflections) ? app.reflections : [];
+            // Ensure personal includes the chosen email
+            if (!personal.email || personal.email.toLowerCase() !== email) {
+                personal.email = email;
+                try { localStorage.setItem('personalInfo', JSON.stringify(personal)); } catch(_) {}
+            }
+            const portfolioPayload = {
+                achievements,
+                reflections,
+                personalInfo: personal && typeof personal === 'object' ? personal : {},
+                profilePhoto: localStorage.getItem('profilePhoto') || null
+            };
+
+            // Final payload
+            const payload = { roll, email, filename, portfolio: portfolioPayload };
+
+            showSaveModal(true, 'Obtaining credentials...');
+
+            // Get backend auth token: prefer RMU_AUTH access token, else id_token fallbacks
+            let idToken = window.__USER_TOKEN || null;
+            if (!idToken) {
+                try { idToken = sessionStorage.getItem('userToken'); } catch(_) {}
+            }
+            if (!idToken && window.RMU_AUTH && typeof RMU_AUTH.getIdToken === 'function') {
                 try { idToken = await RMU_AUTH.getIdToken(); } catch(_) {}
             }
-            if(!idToken && typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
+            if (!idToken && typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance) {
                 const authInstance = gapi.auth2.getAuthInstance();
-                const user = authInstance.currentUser.get();
-                if(user && user.isSignedIn()) {
-                    const authResponse = user.getAuthResponse();
-                    idToken = authResponse.id_token || authResponse.idToken;
+                if (authInstance) {
+                    const user = authInstance.currentUser.get();
+                    if (user && user.isSignedIn()) {
+                        const authResponse = user.getAuthResponse();
+                        idToken = authResponse.access_token || authResponse.id_token || authResponse.idToken;
+                    }
                 }
             }
-            
-            if(!idToken) {
-                throw new Error('Unable to obtain authentication token');
-            }
-            
-            // Use backend with improved service account handling
-            // The backend will use temporary storage, validate, then transfer to admin drive
+            if (!idToken) throw new Error('Unable to obtain authentication token. Please sign in again.');
+
+            showSaveModal(true, 'Saving to server...');
+
             const response = await fetch(base + '/api/save', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + idToken
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
                 body: JSON.stringify({
                     ...payload,
-                    // Add metadata for better backend processing
                     metadata: {
                         userAgent: navigator.userAgent,
                         timestamp: new Date().toISOString(),
@@ -1554,31 +1534,27 @@ window.addEventListener('load', () => {
                 credentials: 'omit',
                 cache: 'no-store'
             });
-            
+
             if (!response.ok) {
-                const errorData = await response.text().catch(() => response.statusText);
-                
-                // Handle specific quota errors with helpful messages
-                if (errorData.includes('storage quota')) {
-                    throw new Error('Storage temporarily unavailable. The system administrator has been notified. Please try again in a few minutes.');
-                } else if (errorData.includes('Access denied')) {
-                    throw new Error('Access denied. Please ensure you are using the correct account and try again.');
-                } else {
-                    throw new Error('Server error: ' + errorData);
-                }
+                const errorText = await response.text().catch(() => response.statusText);
+                // Common backend validations mapped to friendlier messages
+                if (/Invalid email/i.test(errorText)) throw new Error('Your email looks invalid. Please update it in Personal Info or sign in again.');
+                if (/Invalid portfolio/i.test(errorText)) throw new Error('Your portfolio data is not in the expected format. Try making a small edit and saving again.');
+                if (/quota|storage/i.test(errorText)) throw new Error('Storage temporarily unavailable. Please try again in a few minutes.');
+                if (/Access denied|Forbidden|permissions/i.test(errorText)) throw new Error('Access denied. Make sure you are using the same account you signed in with.');
+                throw new Error('Server error: ' + errorText);
             }
-            
-            const result = await response.json().catch(() => ({success: false}));
-            
+
+            const result = await response.json().catch(() => ({ success: false }));
             if (result && result.success) {
                 showSaveModal(true, 'Portfolio saved successfully!' + (result.fileId ? ` (ID: ${result.fileId})` : ''));
                 saveCancel.style.display = 'inline-block';
                 saveCancel.onclick = () => showSaveModal(false);
             } else {
-                throw new Error(result.error || 'Unknown server error');
+                throw new Error(result?.error || 'Unknown server error');
             }
-            
-        } catch(err) {
+
+        } catch (err) {
             console.error('Save error:', err);
             showSaveModal(true, 'Save failed: ' + (err.message || err));
             saveCancel.style.display = 'inline-block';
