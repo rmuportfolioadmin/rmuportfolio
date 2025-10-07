@@ -16,6 +16,7 @@ RUN npm ci --omit=dev --quiet || npm install --omit=dev --quiet
 
 # Copy application files
 COPY server.js ./
+COPY cleanup-script.js ./
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs

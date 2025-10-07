@@ -30,7 +30,6 @@ Thumbs.db
 DEPLOYMENT-GUIDE.md
 MULTI-USER-GUIDE.md
 TESTING-GUIDE.md
-cleanup-script.js
 monitor.html
 
 # Cloud Run doesn't need these
