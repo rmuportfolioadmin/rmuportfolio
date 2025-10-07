@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { OAuth2Client } from 'google-auth-library';
 import { google } from 'googleapis';
+import { cleanupOldTempFiles } from './cleanup-script.js';
 
 // Environment configuration
 const PORT = process.env.PORT || 8080;
@@ -41,9 +42,21 @@ app.use(cors({
 // Health & Root routes
 app.get('/', (req,res)=> res.status(200).json({ 
   service: 'RMU Portfolio Backend', 
-  version: '1.0.0',
+  version: '2.0.0',
   status: 'running',
-  endpoints: ['/healthz', '/api/list', '/api/save', '/api/download', '/api/generate-manifest']
+  endpoints: [
+    '/healthz',
+    '/api/list',
+    '/api/save', 
+    '/api/download',
+    '/api/user-portfolios',
+    '/api/user-portfolio',
+    '/api/user-drive-portfolio',
+    '/api/storage-status',
+    '/api/cleanup-temp-files',
+    '/api/generate-manifest'
+  ],
+  features: ['multi-user-support', 'two-tier-storage', 'user-isolation']
 }));
 app.get('/healthz', (req,res)=> res.status(200).json({ ok: true }));
 
@@ -385,6 +398,108 @@ async function cleanupTempFile(drive, tempFileId) {
   }
 }
 
+// After successful final write: prune any duplicate/backup files for this user+filename
+// and remove older revisions so only the latest revision remains
+async function pruneFinalBackupsAndRevisions(drive, ownerEmail, filename, keptFileId) {
+  try {
+    // Locate the user's folder under the final folder
+    const finalFolderId = await getOrCreateFolder(drive, FINAL_FOLDER_NAME, DRIVE_PARENT_FOLDER_ID);
+    const userFolderName = `user_${ownerEmail.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    const userFolderId = await getOrCreateFolder(drive, userFolderName, finalFolderId);
+
+    // Find all files for this user+originalFilename
+    const listResp = await drive.files.list({
+      q: `'${userFolderId}' in parents and trashed=false and mimeType='application/json'`,
+      fields: 'files(id,name,appProperties,modifiedTime)'
+    });
+
+    const sanitizedBase = filename.replace(/[^a-zA-Z0-9\-_]/g, '_');
+    const related = (listResp.data.files || []).filter(f => {
+      const props = f.appProperties || {};
+      // Prefer explicit appProperties match
+      if (props.userId === ownerEmail && props.originalFilename === filename) return true;
+      // Fallback: legacy files might lack appProperties; match by name pattern
+      const name = f.name || '';
+      return name === `${sanitizedBase}.json` || name.startsWith(`${sanitizedBase}_`);
+    });
+
+    // Delete all but the kept file
+    let deletedCount = 0;
+    for (const f of related) {
+      if (f.id === keptFileId) continue;
+      try {
+        await drive.files.delete({ fileId: f.id });
+        deletedCount++;
+        console.log(`[Prune] Deleted duplicate/backup file: ${f.name} (${f.id})`);
+      } catch (err) {
+        console.warn(`[Prune] Failed to delete ${f.id}:`, err.message);
+      }
+    }
+
+    // Prune older revisions of the kept file (keep only the most recent)
+    try {
+      const revList = await drive.revisions.list({ fileId: keptFileId, fields: 'revisions(id,modifiedTime,keepForever)' });
+      const revisions = revList.data.revisions || [];
+      if (revisions.length > 1) {
+        // Sort by modifiedTime and keep the newest
+        const sorted = [...revisions].sort((a, b) => new Date(a.modifiedTime) - new Date(b.modifiedTime));
+        const toDelete = sorted.slice(0, -1); // all except newest
+        for (const rev of toDelete) {
+          try {
+            await drive.revisions.delete({ fileId: keptFileId, revisionId: rev.id });
+            console.log(`[Prune] Deleted old revision ${rev.id} of file ${keptFileId}`);
+          } catch (err) {
+            console.warn(`[Prune] Failed deleting revision ${rev.id} of ${keptFileId}:`, err.message);
+          }
+        }
+      }
+    } catch (err) {
+      // Not all file types support revisions, or permissions may vary; continue
+      console.warn('[Prune] Skipped revision pruning:', err.message);
+    }
+
+    return { deletedDuplicates: deletedCount };
+  } catch (error) {
+    console.warn('[Prune] Failed to prune backups/versions:', error.message);
+    return { deletedDuplicates: 0, error: error.message };
+  }
+}
+
+// Permanently delete only our app's trashed JSONs inside known folders (protects unrelated files)
+async function emptyServiceAccountTrash(drive) {
+  try {
+    const finalFolderId = await getOrCreateFolder(drive, FINAL_FOLDER_NAME, DRIVE_PARENT_FOLDER_ID);
+    const tempFolderId = await getOrCreateFolder(drive, TEMP_FOLDER_NAME);
+    const folderIds = [tempFolderId, finalFolderId];
+
+    for (const folderId of folderIds) {
+      try {
+        // Only pick trashed JSON files that likely belong to our app (have appProperties or .json name)
+        const trashed = await drive.files.list({
+          q: `'${folderId}' in parents and trashed=true and mimeType='application/json'`,
+          fields: 'files(id,name,appProperties)'
+        });
+        for (const f of trashed.data.files || []) {
+          const props = f.appProperties || {};
+          const isOurFile = !!(props.userId || props.originalFilename || props.status);
+          if (isOurFile || (f.name || '').toLowerCase().endsWith('.json')) {
+            try {
+              await drive.files.delete({ fileId: f.id });
+              console.log(`[Cleanup] Permanently deleted trashed JSON: ${f.name} (${f.id})`);
+            } catch (e) {
+              console.warn(`[Cleanup] Failed to permanently delete trashed file ${f.id}:`, e.message);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[Cleanup] Skipped selective trash cleanup for folder', folderId, e.message);
+      }
+    }
+  } catch (err) {
+    console.warn('[Cleanup] Selective trash cleanup encountered an issue:', err.message);
+  }
+}
+
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
@@ -451,13 +566,23 @@ app.post('/api/save', async (req, res) => {
       });
     }
     
-    // Step 3: Transfer to final storage (use authenticated email for ownership, preserve portfolio email in data)
-    const finalFileId = await transferToFinalStorage(drive, tempFileId, filename, ownerEmail, portfolio);
+  // Step 3: Transfer to final storage (use authenticated email for ownership, preserve portfolio email in data)
+  const finalFileId = await transferToFinalStorage(drive, tempFileId, filename, ownerEmail, portfolio);
     console.log(`[Save] Transferred to final storage: ${finalFileId}`);
     
-    // Step 4: Clean up temporary storage
-    await cleanupTempFile(drive, tempFileId);
-    console.log(`[Save] Cleaned up temporary file: ${tempFileId}`);
+  // Step 4: Clean up temporary storage (permanent delete)
+  await cleanupTempFile(drive, tempFileId);
+  console.log(`[Save] Cleaned up temporary file: ${tempFileId}`);
+
+  // Step 5: Prune any previous duplicates/backups and older revisions for this user's file
+  await pruneFinalBackupsAndRevisions(drive, ownerEmail, filename, finalFileId);
+
+  // Step 6: Ensure service account trash is emptied to free space immediately
+  await emptyServiceAccountTrash(drive);
+
+  // Step 7: Opportunistic background cleanup of any lingering old temp files
+  // (uses the same service account credentials on Cloud Run)
+  try { await cleanupOldTempFiles(); } catch (e) { console.warn('[Cleanup] Background old-temp cleanup skipped:', e.message); }
     
     res.json({
       success: true,
@@ -986,8 +1111,8 @@ function extractRollFromFilename(filename) {
   return '';
 }
 
-// Get user's personal portfolio from their Drive appdata folder
-app.get('/api/user-portfolio', async (req,res)=>{
+// Get user's personal portfolio from their Drive appdata folder (legacy)
+app.get('/api/user-drive-portfolio', async (req,res)=>{
   try{
     const auth = req.headers['authorization'] || '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;

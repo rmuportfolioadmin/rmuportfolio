@@ -582,7 +582,6 @@
                 <button id="save-to-server" class="nav-item rmu-save-btn" title="Save portfolio to server" style="display:none;">
                     💾 Save to Server
                 </button>
-                <button id="nav-signout" class="nav-item" title="Sign out and return to welcome" style="display:none;">Sign Out</button>
             </nav>
         </div>
     </header>
@@ -1245,17 +1244,7 @@ async function initializeGisAndGapi() {
         }
     });
 
-    // Header nav Sign Out mirrors the above sign-out behavior
-    const navSignoutBtn = document.getElementById('nav-signout');
-    if (navSignoutBtn) {
-        navSignoutBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            const btn = document.getElementById('signout_button');
-            if (btn && typeof btn.click === 'function') {
-                btn.click();
-            }
-        });
-    }
+    // Header nav Sign Out removed; original signout_button handles sign out + redirect
 
     // Also initialize gapi.client (discovery docs can be added when needed)
     gapi.load('client', async () => {
@@ -1289,7 +1278,7 @@ function updateAuthUIStateGIS(signedIn) {
     const importBtn = document.getElementById('import-json');
     const importInput = document.getElementById('import-json-input');
     const selftestBtn = document.getElementById('drive-selftest');
-    const navSignOut = document.getElementById('nav-signout');
+    // nav-signout removed
     
     console.log(`[Auth UI] Elements found: saveBtn=${!!saveBtn}, loadBtn=${!!loadBtn}, statusDiv=${!!statusDiv}`);
     
@@ -1302,7 +1291,6 @@ function updateAuthUIStateGIS(signedIn) {
         if (exportBtn) { exportBtn.style.setProperty('display','inline-block','important'); }
         if (importBtn) { importBtn.style.setProperty('display','inline-block','important'); }
     if (selftestBtn) { selftestBtn.style.setProperty('display','inline-block','important'); }
-    if (navSignOut) { navSignOut.style.setProperty('display','inline-block','important'); }
         if (importInput && !importInput._bound) {
             importInput.addEventListener('change', (e)=>{
                 const file = e.target.files && e.target.files[0];
@@ -1323,7 +1311,7 @@ function updateAuthUIStateGIS(signedIn) {
         if (exportBtn) { exportBtn.style.setProperty('display','none','important'); }
         if (importBtn) { importBtn.style.setProperty('display','none','important'); }
         if (selftestBtn) { selftestBtn.style.setProperty('display','none','important'); }
-        if (navSignOut) { navSignOut.style.setProperty('display','none','important'); }
+    // nav-signout removed
         console.log('Auth UI updated: signedIn false - save/load buttons hidden (forced)');
     }
 }
@@ -1356,7 +1344,7 @@ window.addEventListener('load', () => {
     .rmu-save-btn:hover{transform:translateY(-1px) !important;box-shadow:0 6px 16px -4px rgba(110,28,23,.5) !important;background:linear-gradient(135deg,#55120f 0%,#6e1c17 100%) !important}
     #save-to-server{display:inline-flex;align-items:center;gap:6px}
     body.signed-in #save-to-server{display:inline-flex !important}
-    body.signed-in #nav-signout{display:inline-flex !important}
+    /* nav-signout removed */
 </style>
 
 <!-- Student Sign-In Modal -->
