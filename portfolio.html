@@ -985,10 +985,23 @@ function gisHandleResponse(resp) {
 }
 
 async function initializeGisAndGapi() {
-    // Ensure gapi.client exists
+    console.log('[Auth] Initializing GIS and gapi.client for Drive access...');
+    
+    // Ensure gapi.client exists and is initialized with Drive API
     await new Promise(resolve => {
         if (window.gapi && gapi.client) return resolve();
-        gapi.load('client', async () => { try { await gapi.client.init({}); } catch(_){} resolve(); });
+        gapi.load('client', async () => {
+            try {
+                await gapi.client.init({
+                    apiKey: '', // Not needed for OAuth
+                    discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
+                });
+                console.log('[Auth] gapi.client initialized with Drive API');
+            } catch(e) {
+                console.warn('[Auth] gapi.client init warning:', e);
+            }
+            resolve();
+        });
     });
 
     // Set up token client (once)
@@ -1006,8 +1019,16 @@ async function initializeGisAndGapi() {
                 } else {
                     updateAuthUIStateGIS(true);
                 }
-                // Trigger auto load if app is ready
-                try { if (window.app && typeof window.app.loadFromDrive === 'function') await window.app.loadFromDrive(); } catch(e){ console.warn('Auto-load after token failed', e); }
+                // Trigger auto load if app is ready and we're in user mode
+                try { 
+                    const isUserMode = sessionStorage.getItem('isUserMode') === 'true';
+                    if (isUserMode && window.app && typeof window.app.loadFromDrive === 'function') {
+                        console.log('[Auth] Triggering Drive auto-load after GIS token');
+                        setTimeout(() => window.app.loadFromDrive(), 100);
+                    }
+                } catch(e){ 
+                    console.warn('[Auth] Auto-load after token failed', e); 
+                }
             } else if (tokenResponse && tokenResponse.error) {
                 console.warn('[Auth] Token error:', tokenResponse.error);
                 updateAuthUIStateGIS(false);
@@ -1021,20 +1042,39 @@ async function initializeGisAndGapi() {
         const isUserMode = sessionStorage.getItem('isUserMode') === 'true';
         const userEmail = sessionStorage.getItem('userEmail');
         const ssToken = sessionStorage.getItem('userToken');
+        
         if (isUserMode && userEmail) {
+            console.log('[Auth] User mode detected for:', userEmail);
+            
             if (ssToken) {
                 try {
                     gapi.client.setToken({ access_token: ssToken });
                     accessToken = ssToken;
                     console.log('[Auth] Applied session access token to gapi.client');
+                    
+                    // Update UI immediately
                     if (document.readyState === 'loading') {
-                        document.addEventListener('DOMContentLoaded', () => updateAuthUIStateGIS(true));
+                        document.addEventListener('DOMContentLoaded', () => {
+                            updateAuthUIStateGIS(true);
+                            // Trigger auto-load from Drive after UI is ready
+                            if (window.app && typeof window.app.loadFromDrive === 'function') {
+                                setTimeout(() => window.app.loadFromDrive(), 500);
+                            }
+                        });
                     } else {
                         updateAuthUIStateGIS(true);
+                        // Trigger auto-load from Drive after UI is ready
+                        if (window.app && typeof window.app.loadFromDrive === 'function') {
+                            setTimeout(() => window.app.loadFromDrive(), 500);
+                        }
                     }
-                } catch (e) { console.warn('[Auth] Failed to apply session token', e); }
+                } catch (e) { 
+                    console.warn('[Auth] Failed to apply session token', e); 
+                }
             }
-            console.log('[Auth] User mode detected, attempting silent Drive token refresh');
+            
+            // Always attempt silent refresh to ensure fresh token
+            console.log('[Auth] Requesting silent Drive token refresh');
             tokenClient.requestAccessToken({ prompt: '' });
         }
     } catch (e) {
