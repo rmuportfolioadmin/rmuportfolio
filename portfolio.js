@@ -3115,7 +3115,17 @@ PortfolioApp.prototype.loadFromDrive = async function() {
   try {
     // Guard: ensure gapi is available before attempting to use it
     if (typeof gapi === 'undefined' || !gapi || !gapi.client) {
-      this.showToast('Google API not loaded', 'error');
+      console.warn('[Drive] Google API not loaded, cannot access Drive');
+      this.showToast('Google Drive not available', 'warning');
+      this.hideLoadingBar(false);
+      return;
+    }
+    
+    // Ensure we have a valid token
+    const token = gapi.client.getToken && gapi.client.getToken();
+    if (!token || !token.access_token) {
+      console.warn('[Drive] No valid access token available');
+      this.showToast('Please sign in to access your Drive portfolio', 'warning');
       this.hideLoadingBar(false);
       return;
     }
@@ -3426,13 +3436,22 @@ PortfolioApp.prototype.createDefaultPortfolioInAppData = async function() {
       if (hasDriveToken()) {
         clearInterval(timer);
         try {
-          console.log('Drive token detected — auto-loading user portfolio from secure appDataFolder.');
-          await window.app.loadFromDrive();
+          // Only auto-load if we're in user mode or have session data
+          const isUserMode = sessionStorage.getItem('isUserMode') === 'true';
+          const hasUserEmail = !!sessionStorage.getItem('userEmail');
+          
+          if (isUserMode && hasUserEmail && window.app && typeof window.app.loadFromDrive === 'function') {
+            console.log('[Drive] Token detected — auto-loading user portfolio from appDataFolder');
+            await window.app.loadFromDrive();
+          } else {
+            console.log('[Drive] Token available but not in user mode, skipping auto-load');
+          }
         } catch (e) {
-          console.warn('Drive auto-load failed', e);
+          console.warn('[Drive] Auto-load failed:', e);
         }
       } else if (Date.now() - start > maxMs) {
         clearInterval(timer);
+        console.log('[Drive] Auto-load timeout - no token detected within 10s');
       }
     }, interval);
   }
