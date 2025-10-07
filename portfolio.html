@@ -973,7 +973,7 @@
 <button id="drive-selftest" onclick="app.runDriveSelfTest()" style="display:none;position:fixed;top:190px;right:10px;z-index:9999;">Test Drive Sync</button>
 <script>
 // Google Identity Services (GIS) + gapi.client integration
-const CLIENT_ID = '230626308317-ts08shmn77745hq81ghu5q7e2s2i0gf9.apps.googleusercontent.com';
+const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) || window.GOOGLE_CLIENT_ID || 'YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com';
 // Minimal scope: appDataFolder only (hidden per-user storage). Legacy migration handled manually via Import JSON.
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
 
@@ -985,88 +985,67 @@ function gisHandleResponse(resp) {
 }
 
 async function initializeGisAndGapi() {
-    // Check for existing user token from sessionStorage (user mode from index.html)
-    const existingUserToken = sessionStorage.getItem('userToken');
-    const isUserMode = sessionStorage.getItem('isUserMode');
-    
-    if(isUserMode === 'true' && existingUserToken) {
-        console.log('[Auth] User mode detected with existing token');
-        // Set up authentication with existing token
-        accessToken = existingUserToken;
-        
-        // Ensure gapi.client is initialized before setting token
-        try {
-            await new Promise(resolve => {
-                if (gapi.client && gapi.client.setToken) {
-                    resolve();
-                } else {
-                    gapi.load('client', async () => {
-                        await gapi.client.init({});
-                        resolve();
-                    });
-                }
-            });
-            
-            gapi.client.setToken({access_token: accessToken});
-            window.accessToken = accessToken;
-            
-            // Ensure DOM is ready before updating UI
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', () => updateAuthUIStateGIS(true));
-            } else {
-                updateAuthUIStateGIS(true);
-            }
-            
-            console.log('[Auth] User token from sessionStorage set on gapi.client');
-        } catch(e) {
-            console.error('[Auth] Failed to set token on gapi.client:', e);
-            // Still update UI even if gapi setup fails - but wait for DOM
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', () => updateAuthUIStateGIS(true));
-            } else {
-                updateAuthUIStateGIS(true);
-            }
-        }
-        return; // Don't set up interactive auth for user mode
-    }
+    // Ensure gapi.client exists
+    await new Promise(resolve => {
+        if (window.gapi && gapi.client) return resolve();
+        gapi.load('client', async () => { try { await gapi.client.init({}); } catch(_){} resolve(); });
+    });
 
-    // create the token client for interactive authentication
+    // Set up token client (once)
     tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
         callback: async (tokenResponse) => {
-            if (tokenResponse.error) {
-                console.error('Token error', tokenResponse);
-                return;
-            }
-            accessToken = tokenResponse.access_token;
-            // Initialize gapi.client with the token
-            gapi.client.setToken({access_token: accessToken});
-            console.log('Access token set on gapi.client - User authenticated with appDataFolder scope');
-            updateAuthUIStateGIS(true);
-            // Persist minimal user-mode context so Drive features remain active across reloads
-            try {
-                sessionStorage.setItem('userToken', accessToken);
-                sessionStorage.setItem('isUserMode', 'true');
-            } catch(e) { console.warn('Could not persist user token to sessionStorage', e); }
-            
-            // Automatically load user's portfolio data from their private appDataFolder
-            try {
-                if (window.app && typeof window.app.loadFromDrive === 'function') {
-                    console.log('Auto-loading user portfolio from appDataFolder...');
-                    await window.app.loadFromDrive();
+            if (tokenResponse && tokenResponse.access_token) {
+                accessToken = tokenResponse.access_token;
+                try { gapi.client.setToken({ access_token: accessToken }); } catch(_){}
+                console.log('[Auth] Access token set on gapi.client - appDataFolder scope ready');
+                // Update UI once DOM is ready
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => updateAuthUIStateGIS(true));
+                } else {
+                    updateAuthUIStateGIS(true);
                 }
-            } catch (e) {
-                console.warn('Failed to auto-load portfolio on sign-in:', e);
+                // Trigger auto load if app is ready
+                try { if (window.app && typeof window.app.loadFromDrive === 'function') await window.app.loadFromDrive(); } catch(e){ console.warn('Auto-load after token failed', e); }
+            } else if (tokenResponse && tokenResponse.error) {
+                console.warn('[Auth] Token error:', tokenResponse.error);
+                updateAuthUIStateGIS(false);
             }
         }
     });
 
-    // Attach button handlers
+    // If we arrived from index.html user flow, first try using its access token immediately,
+    // then attempt a silent refresh via GIS (no prompt) to ensure token freshness.
+    try {
+        const isUserMode = sessionStorage.getItem('isUserMode') === 'true';
+        const userEmail = sessionStorage.getItem('userEmail');
+        const ssToken = sessionStorage.getItem('userToken');
+        if (isUserMode && userEmail) {
+            if (ssToken) {
+                try {
+                    gapi.client.setToken({ access_token: ssToken });
+                    accessToken = ssToken;
+                    console.log('[Auth] Applied session access token to gapi.client');
+                    if (document.readyState === 'loading') {
+                        document.addEventListener('DOMContentLoaded', () => updateAuthUIStateGIS(true));
+                    } else {
+                        updateAuthUIStateGIS(true);
+                    }
+                } catch (e) { console.warn('[Auth] Failed to apply session token', e); }
+            }
+            console.log('[Auth] User mode detected, attempting silent Drive token refresh');
+            tokenClient.requestAccessToken({ prompt: '' });
+        }
+    } catch (e) {
+        console.warn('[Auth] Silent token attempt skipped:', e.message);
+    }
+
+    // Attach button handlers (interactive prompt)
     document.getElementById('authorize_button').addEventListener('click', () => {
         if (!tokenClient) { console.error('tokenClient not ready'); return; }
         // Request an access token; this may open a popup
-        tokenClient.requestAccessToken({prompt: 'consent'});
+        tokenClient.requestAccessToken({ prompt: 'consent' });
     });
 
     document.getElementById('signout_button').addEventListener('click', () => {
@@ -1104,18 +1083,6 @@ async function initializeGisAndGapi() {
                 RMU_AUTH.signOut().catch(e => console.warn('[Auth] RMU_AUTH signOut failed:', e));
             }
             
-            // Sign out from gapi auth2 if available
-            if (typeof gapi !== 'undefined' && gapi.auth2) {
-                try {
-                    const authInstance = gapi.auth2.getAuthInstance();
-                    if (authInstance && authInstance.isSignedIn && authInstance.isSignedIn.get()) {
-                        authInstance.signOut().catch(e => console.warn('[Auth] gapi signOut failed:', e));
-                    }
-                } catch (e) {
-                    console.warn('[Auth] gapi auth2 error:', e);
-                }
-            }
-            
             // Disable Google One Tap
             if (window.google && google.accounts && google.accounts.id) {
                 try {
@@ -1144,17 +1111,7 @@ async function initializeGisAndGapi() {
         }
     });
 
-    // Header nav Sign Out removed; original signout_button handles sign out + redirect
-
-    // Also initialize gapi.client (discovery docs can be added when needed)
-    gapi.load('client', async () => {
-        try{
-            await gapi.client.init({});
-            console.log('gapi.client initialized');
-        }catch(e){ console.error('gapi.client.init error', e); }
-    });
-
-    // Poll to update UI (in case token established by popup)
+    // Poll to update UI (in case token established by popup elsewhere)
     const poll = setInterval(()=>{
         try{
             const token = gapi.client.getToken && gapi.client.getToken();
