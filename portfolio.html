@@ -579,6 +579,7 @@
                 <button id="save-to-server" class="nav-item rmu-save-btn" title="Save portfolio to server" style="display:none;">
                     💾 Save to Server
                 </button>
+                <button id="nav-signout" class="nav-item" title="Sign out and return to welcome" style="display:none;">Sign Out</button>
             </nav>
         </div>
     </header>
@@ -1241,6 +1242,18 @@ async function initializeGisAndGapi() {
         }
     });
 
+    // Header nav Sign Out mirrors the above sign-out behavior
+    const navSignoutBtn = document.getElementById('nav-signout');
+    if (navSignoutBtn) {
+        navSignoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('signout_button');
+            if (btn && typeof btn.click === 'function') {
+                btn.click();
+            }
+        });
+    }
+
     // Also initialize gapi.client (discovery docs can be added when needed)
     gapi.load('client', async () => {
         try{
@@ -1273,6 +1286,7 @@ function updateAuthUIStateGIS(signedIn) {
     const importBtn = document.getElementById('import-json');
     const importInput = document.getElementById('import-json-input');
     const selftestBtn = document.getElementById('drive-selftest');
+    const navSignOut = document.getElementById('nav-signout');
     
     console.log(`[Auth UI] Elements found: saveBtn=${!!saveBtn}, loadBtn=${!!loadBtn}, statusDiv=${!!statusDiv}`);
     
@@ -1284,7 +1298,8 @@ function updateAuthUIStateGIS(signedIn) {
         if (loadBtn) { loadBtn.style.setProperty('display','inline-block','important'); }
         if (exportBtn) { exportBtn.style.setProperty('display','inline-block','important'); }
         if (importBtn) { importBtn.style.setProperty('display','inline-block','important'); }
-        if (selftestBtn) { selftestBtn.style.setProperty('display','inline-block','important'); }
+    if (selftestBtn) { selftestBtn.style.setProperty('display','inline-block','important'); }
+    if (navSignOut) { navSignOut.style.setProperty('display','inline-block','important'); }
         if (importInput && !importInput._bound) {
             importInput.addEventListener('change', (e)=>{
                 const file = e.target.files && e.target.files[0];
@@ -1305,6 +1320,7 @@ function updateAuthUIStateGIS(signedIn) {
         if (exportBtn) { exportBtn.style.setProperty('display','none','important'); }
         if (importBtn) { importBtn.style.setProperty('display','none','important'); }
         if (selftestBtn) { selftestBtn.style.setProperty('display','none','important'); }
+        if (navSignOut) { navSignOut.style.setProperty('display','none','important'); }
         console.log('Auth UI updated: signedIn false - save/load buttons hidden (forced)');
     }
 }
@@ -1337,6 +1353,7 @@ window.addEventListener('load', () => {
     .rmu-save-btn:hover{transform:translateY(-1px) !important;box-shadow:0 6px 16px -4px rgba(110,28,23,.5) !important;background:linear-gradient(135deg,#55120f 0%,#6e1c17 100%) !important}
     #save-to-server{display:inline-flex;align-items:center;gap:6px}
     body.signed-in #save-to-server{display:inline-flex !important}
+    body.signed-in #nav-signout{display:inline-flex !important}
 </style>
 
 <!-- Student Sign-In Modal -->
@@ -1497,13 +1514,16 @@ window.addEventListener('load', () => {
 
             showSaveModal(true, 'Obtaining credentials...');
 
-            // Get backend auth token: prefer RMU_AUTH access token, else id_token fallbacks
-            let idToken = window.__USER_TOKEN || null;
+            // Get backend auth token: prefer ID token (JWT) via RMU_AUTH, then session token/legacy, then gapi (id_token preferred)
+            let idToken = null;
+            if (window.RMU_AUTH && typeof RMU_AUTH.getIdToken === 'function') {
+                try { idToken = await RMU_AUTH.getIdToken(); } catch(_) {}
+            }
             if (!idToken) {
                 try { idToken = sessionStorage.getItem('userToken'); } catch(_) {}
             }
-            if (!idToken && window.RMU_AUTH && typeof RMU_AUTH.getIdToken === 'function') {
-                try { idToken = await RMU_AUTH.getIdToken(); } catch(_) {}
+            if (!idToken && window.__USER_TOKEN) {
+                idToken = window.__USER_TOKEN;
             }
             if (!idToken && typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance) {
                 const authInstance = gapi.auth2.getAuthInstance();
@@ -1511,7 +1531,8 @@ window.addEventListener('load', () => {
                     const user = authInstance.currentUser.get();
                     if (user && user.isSignedIn()) {
                         const authResponse = user.getAuthResponse();
-                        idToken = authResponse.access_token || authResponse.id_token || authResponse.idToken;
+                        // Prefer ID token for backend verification; fall back to access_token only if necessary
+                        idToken = authResponse.id_token || authResponse.idToken || authResponse.access_token;
                     }
                 }
             }
@@ -1538,10 +1559,10 @@ window.addEventListener('load', () => {
             if (!response.ok) {
                 const errorText = await response.text().catch(() => response.statusText);
                 // Common backend validations mapped to friendlier messages
-                if (/Invalid email/i.test(errorText)) throw new Error('Your email looks invalid. Please update it in Personal Info or sign in again.');
-                if (/Invalid portfolio/i.test(errorText)) throw new Error('Your portfolio data is not in the expected format. Try making a small edit and saving again.');
-                if (/quota|storage/i.test(errorText)) throw new Error('Storage temporarily unavailable. Please try again in a few minutes.');
-                if (/Access denied|Forbidden|permissions/i.test(errorText)) throw new Error('Access denied. Make sure you are using the same account you signed in with.');
+                if (/Invalid\s+email/i.test(errorText)) throw new Error('Your email looks invalid. Please update it in Personal Info or sign in again.');
+                if (/Invalid\s+portfolio/i.test(errorText)) throw new Error('Your portfolio data is not in the expected format. Try making a small edit and saving again.');
+                if (/(storage\s+quota|quota\s+exceeded|insufficient\s+storage)/i.test(errorText)) throw new Error('Storage temporarily unavailable. Please try again in a few minutes.');
+                if (/(Access\s+denied|Forbidden|permissions|unauthorized|unauthorised|invalid token|invalid signature)/i.test(errorText)) throw new Error('Access denied. Make sure you are using the same account you signed in with.');
                 throw new Error('Server error: ' + errorText);
             }
 

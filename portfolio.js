@@ -3177,27 +3177,32 @@ PortfolioApp.prototype.exportPortfolioJson = function(customName) {
     if (customName && String(customName).trim()) {
       // If explicit custom name provided, use it (for legacy compatibility)
       console.log('[Portfolio] Using custom name:', customName);
-      let base = String(customName).trim()
-                  .replace(/["'""'']+/g, '')
-                  .replace(/[^A-Za-z0-9]+/g, '-')
-                  .replace(/^-+|-+$/g, '')
-                  .toLowerCase();
-      if (!base) base = 'portfolio-data';
-      if (base.length > 80) base = base.slice(0, 80);
-      filename = base + '.json';
+      let baseName = String(customName).trim()
+                    .replace(/["“”'‘’]+/g, '')
+                    .replace(/[^A-Za-z0-9]+/g, '-')
+                    .replace(/^-+|-+$/g, '')
+                    .toLowerCase();
+      if (!baseName) baseName = 'portfolio-data';
+      if (baseName.length > 80) baseName = baseName.slice(0, 80);
+      filename = baseName + '.json';
     } else {
       // Use standardized filename based on student name and roll number
       console.log('[Portfolio] Generating standardized JSON filename');
       filename = this.generateStandardFilename('json', 'portfolio-data');
     }
 
-    // Sanitize for filename: remove apostrophes/quotes, replace non-alphanumerics with dashes, collapse dashes
-    base = base.replace(/["'“”‘’]+/g, '')
-               .replace(/[^A-Za-z0-9]+/g, '-')
-               .replace(/^-+|-+$/g, '')
-               .toLowerCase();
-    if (!base) base = 'portfolio-data';
-    // Limit length to avoid OS path issues
+    // Ensure filename safety and extension
+    try {
+      const dotIdx = filename.lastIndexOf('.');
+      const nameOnly = (dotIdx > 0 ? filename.slice(0, dotIdx) : filename)
+        .normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
+        .replace(/["“”'‘’]+/g, '')
+        .replace(/[^A-Za-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase()
+        .slice(0, 80) || 'portfolio-data';
+      filename = nameOnly + '.json';
+    } catch(_) {}
 
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
