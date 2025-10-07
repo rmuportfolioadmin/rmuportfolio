@@ -513,8 +513,11 @@
         };
 
                 // Adoption retry logic when data becomes ready but app not yet constructed
+                const _hasSpecificFile = !!(typeof window.__CURRENT_PORTFOLIO_FILE === 'string' && window.__CURRENT_PORTFOLIO_FILE);
                 let adoptionAttempts = 0;
                 function tryAdoptLoop(){
+                    // Only run adoption loop for specific file mode; skip in user mode (reduces console spam)
+                    if (!_hasSpecificFile) return;
                     if (window.app && typeof window.__ADOPT_PRELOADED==='function' && window.__PRELOADED_PORTFOLIO_DATA){
                         const ok = window.__ADOPT_PRELOADED(window.app);
                         if (ok) { console.log('[portfolio-loader] Adoption loop success'); return; }
@@ -534,7 +537,7 @@
                         }
                     }
                 }
-                window.addEventListener('portfolio_data_ready', ()=>{ console.log('[portfolio-loader] portfolio_data_ready event'); tryAdoptLoop(); });
+                window.addEventListener('portfolio_data_ready', ()=>{ if (_hasSpecificFile) { console.log('[portfolio-loader] portfolio_data_ready event'); tryAdoptLoop(); } });
 
                 // BFCache / back-forward navigation handling:
         // If user visits file A, then file B (which clears storage), then navigates back to A (BFCache restore),
@@ -1561,7 +1564,9 @@ window.addEventListener('load', () => {
                 // Common backend validations mapped to friendlier messages
                 if (/Invalid\s+email/i.test(errorText)) throw new Error('Your email looks invalid. Please update it in Personal Info or sign in again.');
                 if (/Invalid\s+portfolio/i.test(errorText)) throw new Error('Your portfolio data is not in the expected format. Try making a small edit and saving again.');
-                if (/(storage\s+quota|quota\s+exceeded|insufficient\s+storage)/i.test(errorText)) throw new Error('Storage temporarily unavailable. Please try again in a few minutes.');
+                if (/(storage\s+quota|quota\s+exceeded|insufficient\s+storage|temporarily\s+full|storage\s+full|out\s+of\s+space)/i.test(errorText)) {
+                    throw new Error('Storage temporarily unavailable on the server. Please try again later or contact the administrator.');
+                }
                 if (/(Access\s+denied|Forbidden|permissions|unauthorized|unauthorised|invalid token|invalid signature)/i.test(errorText)) throw new Error('Access denied. Make sure you are using the same account you signed in with.');
                 throw new Error('Server error: ' + errorText);
             }
