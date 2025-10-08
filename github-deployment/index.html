@@ -300,16 +300,9 @@
         try {
           const authResult = await window.RMU_AUTH.authenticateUser();
           
-          if (!authResult || !authResult.token) {
-            throw new Error('No token received from authentication');
-          }
-          
           adminToken = authResult.token;
           currentUserEmail = authResult.email;
           isSignedIn = true;
-          
-          console.log('[Welcome] Authentication successful for:', currentUserEmail);
-          console.log('[Welcome] Token type:', authResult.token.includes('.') ? 'JWT' : 'Access Token');
         } catch (authError) {
           console.warn('[Welcome] Modern auth failed, providing fallback:', authError);
           
@@ -510,9 +503,6 @@
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.API_TIMEOUT || 20000);
             
-            console.log('[Admin] Making API call with token:', adminToken ? 'present' : 'missing');
-            console.log('[Admin] Backend URL:', `${backendBase}/api/list`);
-            
             const response = await fetch(`${backendBase}/api/list`, {
               method: 'GET',
               headers: {
@@ -523,8 +513,6 @@
               cache: 'no-store',
               signal: controller.signal
             });
-            
-            console.log('[Admin] Backend response status:', response.status);
             
             clearTimeout(timeout);
             
@@ -549,19 +537,7 @@
                 console.log(`[Admin] Loaded ${remotePortfolios.length} portfolios from Google Drive`);
               }
             } else {
-              const errorText = await response.text().catch(() => response.statusText);
-              console.error(`[Admin] Backend error ${response.status}:`, errorText);
-              
-              if (response.status === 401) {
-                console.log('[Admin] Authentication failed - may need to re-sign in');
-                setStatus('Authentication expired - please refresh and try again');
-              } else if (response.status === 403) {
-                console.log('[Admin] Access forbidden - not admin user');
-                setStatus('Access denied - admin privileges required');
-              } else {
-                console.log(`[Admin] Backend returned ${response.status}, using local data only`);
-                setStatus('Backend unavailable - using local data');
-              }
+              console.log(`[Admin] Backend returned ${response.status}, using local data only`);
             }
           } catch(err) {
             console.log('[Admin] Backend unavailable for Drive access:', err.message);
@@ -979,9 +955,8 @@
           return;
         }
         
-        // Try to fetch user's portfolio from their secure storage
+        // Try to fetch user's portfolio from their Drive appData
         console.log(`[User] Loading portfolio for user: ${email}`);
-        console.log(`[User] Backend URL: ${backendBase}/api/user-portfolio`);
         setStatus('Loading your portfolio from Google Drive...');
         
         const response = await fetch(`${backendBase}/api/user-portfolio`, {
@@ -993,8 +968,6 @@
           credentials: 'omit',
           cache: 'no-store'
         });
-        
-        console.log(`[User] Backend response status: ${response.status}`);
         
         if(response.ok) {
           const portfolioData = await response.json();

@@ -54,30 +54,150 @@
             document.body.classList.add('hide-gallery-nav');
         }
         
+        // Roll number format validation
+        function isValidRollNoFormat(rollNo) {
+            if (!rollNo || typeof rollNo !== 'string') return false;
+            // Format: XXX-RXX-X (3 digits, R + 2 digits, 1 letter)
+            const rollNoPattern = /^\d{3}-R\d{2}-[A-Z]$/;
+            return rollNoPattern.test(rollNo.trim().toUpperCase());
+        }
+        
+        // Show roll number format guide popup
+        function showRollNoGuide() {
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.style.display = 'flex';
+                // Add slight delay for smooth animation
+                setTimeout(() => overlay.classList.add('show'), 10);
+            }
+        }
+        
+        // Hide roll number format guide popup
+        function hideRollNoGuide() {
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.classList.remove('show');
+                setTimeout(() => overlay.style.display = 'none', 200);
+            }
+        }
+        
+        // Initialize roll number guide popup
+        document.addEventListener('DOMContentLoaded', function() {
+            const okBtn = document.getElementById('rollno-guide-ok');
+            if(okBtn) {
+                okBtn.addEventListener('click', hideRollNoGuide);
+            }
+            
+            // Close popup when clicking outside
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if(e.target === overlay) {
+                        hideRollNoGuide();
+                    }
+                });
+            }
+        });
+        
+        // Export functions for use by portfolio.js
+        window.rollNoValidator = {
+            isValid: isValidRollNoFormat,
+            showGuide: showRollNoGuide,
+            hideGuide: hideRollNoGuide
+        };
+        
+        // Roll number format validation
+        function isValidRollNoFormat(rollNo) {
+            if (!rollNo || typeof rollNo !== 'string') return false;
+            // Format: XXX-RXX-X (3 digits, R + 2 digits, 1 letter)
+            const rollNoPattern = /^\d{3}-R\d{2}-[A-Z]$/;
+            return rollNoPattern.test(rollNo.trim().toUpperCase());
+        }
+        
+        // Show roll number format guide popup
+        function showRollNoGuide() {
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.style.display = 'flex';
+                // Add slight delay for smooth animation
+                setTimeout(() => overlay.classList.add('show'), 10);
+            }
+        }
+        
+        // Hide roll number format guide popup
+        function hideRollNoGuide() {
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.classList.remove('show');
+                setTimeout(() => overlay.style.display = 'none', 200);
+            }
+        }
+        
+        // Initialize roll number guide popup
+        document.addEventListener('DOMContentLoaded', function() {
+            const okBtn = document.getElementById('rollno-guide-ok');
+            if(okBtn) {
+                okBtn.addEventListener('click', hideRollNoGuide);
+            }
+            
+            // Close popup when clicking outside
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if(e.target === overlay) {
+                        hideRollNoGuide();
+                    }
+                });
+            }
+        });
+        
+        // Export functions for use by portfolio.js
+        window.rollNoValidator = {
+            isValid: isValidRollNoFormat,
+            showGuide: showRollNoGuide,
+            hideGuide: hideRollNoGuide
+        };
+        
         // Listen for authentication updates from parent window
         window.addEventListener('message', function(event) {
             if(event.data && event.data.type === 'user-portfolio-data') {
                 console.log('[Portfolio] Received user portfolio data from Drive');
+                // Handle user portfolio data loading
                 if(window.app && typeof window.app.loadUserPortfolioData === 'function') {
                     window.app.loadUserPortfolioData(event.data.data);
                 } else {
+                    // Store for later consumption
                     window.__USER_PORTFOLIO_DATA = event.data.data;
                     window.__USER_EMAIL = event.data.email;
                 }
             } else if(event.data && event.data.type === 'admin-portfolio-data') {
                 console.log('[Portfolio] Received admin portfolio data from parent');
+                
+                // Send confirmation back to parent window
                 try {
                     if(event.source && event.source !== window) {
-                        event.source.postMessage({ type: 'admin-data-received', success: true }, '*');
+                        event.source.postMessage({
+                            type: 'admin-data-received',
+                            success: true
+                        }, '*');
                     }
-                } catch(e) { console.warn('[Portfolio] Could not send confirmation to parent:', e); }
+                } catch(e) {
+                    console.warn('[Portfolio] Could not send confirmation to parent:', e);
+                }
+                
+                // Handle admin portfolio data loading
                 if(window.app && typeof window.app.normalizeLoadedData === 'function') {
                     const normalized = window.app.normalizeLoadedData(event.data.data);
                     window.app.loadDataDirectly(normalized);
-                    try { const pre = document.getElementById('preload-status'); if(pre) pre.remove(); } catch(_){ }
+                    // Cancel any pending default redirects or loaders
+                    try {
+                      const pre = document.getElementById('preload-status'); if(pre) pre.remove();
+                    } catch(_){ }
+                    // Mark adopted to prevent auto-loader overriding
                     window.__ADOPTED_SPECIFIC_PORTFOLIO = true;
                     try { localStorage.setItem('__lastPortfolioFile', 'admin-remote'); }catch(_){ }
                 } else {
+                    // Store for later consumption when app loads
                     window.__ADMIN_PORTFOLIO_DATA = event.data.data;
                     window.__ADMIN_FILENAME = event.data.filename;
                 }
@@ -94,9 +214,15 @@
                 
                 if(isUserMode === 'true' && userEmail) {
                     console.log('[Portfolio] User mode detected:', userEmail);
+                    
+                    // Store user credentials globally for Drive operations
                     window.__USER_EMAIL = userEmail;
                     window.__USER_TOKEN = userToken;
                     window.__IS_USER_MODE = true;
+                    
+                    // Authentication will be set up by initializeGisAndGapi when gapi loads
+                    
+                    // If we have portfolio data from Drive, use it
                     if(userPortfolioData) {
                         try {
                             const portfolioData = JSON.parse(userPortfolioData);
@@ -106,77 +232,308 @@
                             console.error('[Portfolio] Failed to parse user portfolio data:', e);
                         }
                     }
+                    
+                    // Enable user authentication UI
                     document.body.classList.add('user-authenticated');
-                    document.body.classList.add('signed-in');
-                    try { document.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { signedIn: true, email: userEmail } })); } catch(_) {}
-                    if (!userPortfolioData && userToken) {
-                        console.log('[Portfolio] No portfolio data in sessionStorage, will attempt auto-load from Drive once app is ready');
-                        window.__AUTO_LOAD_FROM_DRIVE = true;
+                    document.body.classList.add('signed-in'); // Show save-to-server and other auth-required buttons
+                    
+                    // Clean up sessionStorage to prevent conflicts
+                    try {
+                        sessionStorage.removeItem('userPortfolioData');
+                    } catch(e) {
+                        console.warn('[Portfolio] Could not clean sessionStorage:', e);
                     }
-                    try { sessionStorage.removeItem('userPortfolioData'); } catch(e) { console.warn('[Portfolio] Could not clean sessionStorage:', e); }
                 }
-            } catch(e) { console.warn('[Portfolio] Error checking user mode:', e); }
+            } catch(e) {
+                console.warn('[Portfolio] Error checking user mode:', e);
+            }
         }
         
+        // Check immediately and after DOM loads
         checkUserMode();
         document.addEventListener('DOMContentLoaded', checkUserMode);
     })();
     </script>
     <script>
+    // Roll number format validation (defined early for global access)
     function isValidRollNoFormat(rollNo) {
-        if (!rollNo || typeof rollNo !== 'string') { return false; }
+        console.log('[RollNo] Validating roll number:', rollNo);
+        if (!rollNo || typeof rollNo !== 'string') {
+            console.log('[RollNo] Invalid input - not a string or empty');
+            return false;
+        }
+        // Format: XXX-RXX-X (3 digits, R + 2 digits, 1 letter)
         const rollNoPattern = /^\d{3}-R\d{2}-[A-Z]$/;
         const normalizedInput = rollNo.trim().toUpperCase();
-        return rollNoPattern.test(normalizedInput);
+        const isValid = rollNoPattern.test(normalizedInput);
+        console.log('[RollNo] Validation result:', isValid, 'for normalized input:', normalizedInput);
+        return isValid;
     }
 
+    // Query param portfolio JSON loader shim (enhanced for reliability).
+    // If ?file=... is provided, we fetch that JSON early and store it in window.__PRELOADED_PORTFOLIO_DATA
+    // so existing PortfolioApp logic can later choose to adopt it.
     (function(){
         function getParam(name){
             try { return new URLSearchParams(location.search).get(name); } catch(e){ return null; }
         }
-        const file = getParam('file');
-        if(!file) return;
+    const file = getParam('file');
+        console.log('[portfolio-loader] Query param file:', file);
+        
+        if(!file) {
+            console.log('[portfolio-loader] No ?file= parameter found, using default behavior');
+            return; // fallback to existing auto loader behavior
+        }
+        
+        // AGGRESSIVE CACHE CLEARING - Ensure no previous portfolio data remains
         try {
-            const qp = new URLSearchParams(location.search);
-            const isUserMode = qp.get('user') === '1';
-            let preserved = {};
-            const preserveKeys = ['isUserMode','userEmail','userToken','userPortfolioData'];
-            if (isUserMode) { try { preserveKeys.forEach(k => preserved[k] = sessionStorage.getItem(k)); } catch(_) {} }
-            try { delete window.__PRELOADED_PORTFOLIO_DATA; } catch(_) {}
-            try { delete window.app; } catch(_) {}
-            try { sessionStorage.clear(); } catch(_) {}
-            if (isUserMode) { try { preserveKeys.forEach(k => { if (preserved[k] !== null && preserved[k] !== undefined) sessionStorage.setItem(k, preserved[k]); }); } catch(_) {} }
-        } catch(e) { }
+            localStorage.clear();
+            sessionStorage.clear();
+            delete window.__PRELOADED_PORTFOLIO_DATA;
+            delete window.app;
+            console.log('[portfolio-loader] ✓ Cleared all cache and previous data');
+        } catch(e) { console.warn('[portfolio-loader] Cache clearing error:', e); }
+        
+        // Mark that we're loading a specific file to prevent repo override
         window.__LOADING_SPECIFIC_FILE = true;
         window.__CURRENT_PORTFOLIO_FILE = file;
-        const pre = document.createElement('div');
-        pre.id = 'preload-status';
-        pre.textContent = `Loading ${file.replace('data/', '')}...`;
-        pre.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;padding:18px 30px;border:1px solid #c9d4e2;border-radius:18px;font:600 14px Inter,system-ui,sans-serif;z-index:10001;box-shadow:0 8px 32px -8px rgba(0,0,0,.25);letter-spacing:.5px;';
-        document.addEventListener('DOMContentLoaded',()=>{ document.body.appendChild(pre); document.querySelectorAll('.section').forEach(s=>{ s.style.visibility='hidden'; }); });
+        
+                // Show blocking centered loading indicator & hide content until adoption
+                const pre = document.createElement('div');
+                pre.id = 'preload-status';
+                pre.textContent = `Loading ${file.replace('data/', '')}...`;
+                pre.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;padding:18px 30px;border:1px solid #c9d4e2;border-radius:18px;font:600 14px Inter,system-ui,sans-serif;z-index:10001;box-shadow:0 8px 32px -8px rgba(0,0,0,.25);letter-spacing:.5px;';
+                document.addEventListener('DOMContentLoaded',()=>{
+                    document.body.appendChild(pre);
+                    document.querySelectorAll('.section').forEach(s=>{ s.style.visibility='hidden'; });
+                });
+        
+        // Fetch the specific portfolio file with aggressive cache-busting
         const cacheBuster = Date.now();
         const fileUrl = file.includes('?') ? `${file}&cb=${cacheBuster}` : `${file}?cb=${cacheBuster}`;
+        
+        // Add overall timeout to prevent infinite loading
+        // If admin remote mode, do not auto-redirect to default JSON; admin data will be injected via postMessage
         const isAdminMode = /(^|[?&])admin=1(&|$)/.test(location.search);
         const isRemoteMode = /(^|[?&])remote=1(&|$)/.test(location.search);
         const overallTimeout = setTimeout(() => {
+            console.error('[portfolio-loader] Overall timeout reached - falling back to default portfolio');
             const pre = document.getElementById('preload-status');
-            if (pre) { pre.textContent = 'File not found - Loading default portfolio...'; pre.style.background = '#fff4e6'; }
-            if(!(isAdminMode && isRemoteMode)){ setTimeout(() => { window.location.href = 'portfolio.html?file=portfolio-data.json'; }, 2000); }
-        }, 15000);
+            if (pre) {
+                pre.textContent = 'File not found - Loading default portfolio...';
+                pre.style.background = '#fff4e6';
+            }
+            // Redirect to default portfolio after 2 seconds
+            if(!(isAdminMode && isRemoteMode)){
+              setTimeout(() => { window.location.href = 'portfolio.html?file=portfolio-data.json'; }, 2000);
+            }
+        }, 15000); // 15 second overall timeout
+        
         (function fetchWithRetry(url, attempt=1){
+            // Add fetch timeout
             const controller = new AbortController();
-            const fetchTimeout = setTimeout(() => controller.abort(), 8000);
-            fetch(url, { cache:'no-store', signal: controller.signal, headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate','Pragma': 'no-cache','Expires': '0' } })
-            .then(r=>{ clearTimeout(fetchTimeout); clearTimeout(overallTimeout); if(!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`); return r.json(); })
-            .then(data => { window.__PRELOADED_PORTFOLIO_DATA = data; window.dispatchEvent(new CustomEvent('portfolio_data_ready')); pre.textContent = 'Portfolio loaded successfully'; })
-            .catch(err => { clearTimeout(fetchTimeout); const is404 = err.message.includes('404') || err.message.includes('Not Found'); if (attempt < 3 && !is404) { const delay = 300 * attempt; pre.textContent = `Retrying (${attempt})...`; setTimeout(()=>fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`, attempt+1), delay); } else { clearTimeout(overallTimeout); if (is404) { pre.textContent = `File not found - Redirecting to default portfolio...`; pre.style.background = '#fff4e6'; if(!(isAdminMode && isRemoteMode)){ setTimeout(() => { window.location.href = 'portfolio.html?file=portfolio-data.json'; }, 2000); } } else { pre.textContent = `Failed to load ${file.replace('data/','')}`; pre.style.background = '#ffe6e6'; const retryBtn = document.createElement('button'); retryBtn.textContent = 'Retry'; retryBtn.style.cssText='margin-left:8px;padding:4px 10px;font-size:12px;border:1px solid #c33;background:#b22222;color:#fff;border-radius:6px;cursor:pointer;'; retryBtn.onclick=()=>{ retryBtn.disabled=true; pre.textContent='Retrying...'; fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`,1); }; const fallbackBtn = document.createElement('button'); fallbackBtn.textContent = 'Use Default'; fallbackBtn.style.cssText='margin-left:8px;padding:4px 10px;font-size:12px;border:1px solid #06c;background:#0066cc;color:#fff;border-radius:6px;cursor:pointer;'; fallbackBtn.onclick=()=>{ window.location.href = 'portfolio.html?file=portfolio-data.json'; }; pre.appendChild(retryBtn); pre.appendChild(fallbackBtn); } } });
+            const fetchTimeout = setTimeout(() => controller.abort(), 8000); // 8 second per-request timeout
+            
+            fetch(url, {
+                cache:'no-store',
+                signal: controller.signal,
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
+            })
+            .then(r=>{ 
+                clearTimeout(fetchTimeout);
+                clearTimeout(overallTimeout); // Clear overall timeout on success
+                console.log('[portfolio-loader] Fetch response:', r.status, r.ok, 'attempt', attempt);
+                if(!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+                return r.json();
+            })
+            .then(data => { 
+                console.log('[portfolio-loader] Successfully loaded data from:', file);
+                console.log('[portfolio-loader] Data preview:', {
+                    achievements: data.achievements?.length || 0,
+                    reflections: data.reflections?.length || 0,
+                    name: data.name || data.title || 'No name'
+                });
+                window.__PRELOADED_PORTFOLIO_DATA = data;
+                window.dispatchEvent(new CustomEvent('portfolio_data_ready'));
+                pre.textContent = 'Portfolio loaded successfully';
+                // don't remove until adoption done; adoption will remove
+            })
+            .catch(err => { 
+                clearTimeout(fetchTimeout);
+                console.error('[portfolio-loader] Failed to load portfolio file attempt', attempt, err);
+                
+                // Handle specific error cases
+                const is404 = err.message.includes('404') || err.message.includes('Not Found');
+                const isTimeout = err.name === 'AbortError';
+                
+                if (attempt < 3 && !is404) {
+                    const delay = 300 * attempt;
+                    pre.textContent = `Retrying (${attempt})...`;
+                    setTimeout(()=>fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`, attempt+1), delay);
+                } else {
+                    clearTimeout(overallTimeout); // Clear overall timeout since we're handling the error
+                    
+                    if (is404) {
+                        pre.textContent = `File not found - Redirecting to default portfolio...`;
+                        pre.style.background = '#fff4e6';
+                        if(!(isAdminMode && isRemoteMode)){
+                          setTimeout(() => { window.location.href = 'portfolio.html?file=portfolio-data.json'; }, 2000);
+                        }
+                    } else {
+                        pre.textContent = `Failed to load ${file.replace('data/','')}`;
+                        pre.style.background = '#ffe6e6';
+                        // Offer manual retry and fallback buttons
+                        const retryBtn = document.createElement('button');
+                        retryBtn.textContent = 'Retry';
+                        retryBtn.style.cssText='margin-left:8px;padding:4px 10px;font-size:12px;border:1px solid #c33;background:#b22222;color:#fff;border-radius:6px;cursor:pointer;';
+                        retryBtn.onclick=()=>{ retryBtn.disabled=true; pre.textContent='Retrying...'; fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`,1); };
+                        
+                        const fallbackBtn = document.createElement('button');
+                        fallbackBtn.textContent = 'Use Default';
+                        fallbackBtn.style.cssText='margin-left:8px;padding:4px 10px;font-size:12px;border:1px solid #06c;background:#0066cc;color:#fff;border-radius:6px;cursor:pointer;';
+                        fallbackBtn.onclick=()=>{ window.location.href = 'portfolio.html?file=portfolio-data.json'; };
+                        
+                        pre.appendChild(retryBtn);
+                        pre.appendChild(fallbackBtn);
+                    }
+                }
+            });
         })(fileUrl,1);
-        window.__ADOPT_PRELOADED = function(appInstance){ try { if(!window.__PRELOADED_PORTFOLIO_DATA) return false; if(!appInstance || typeof appInstance.normalizeLoadedData !== 'function') return false; const norm = appInstance.normalizeLoadedData(window.__PRELOADED_PORTFOLIO_DATA); appInstance.achievements = []; appInstance.reflections = []; appInstance.achievements = norm.achievements || []; appInstance.reflections = norm.reflections || []; if(norm.personalInfo){ try { if(norm.personalInfo.rollNo && !isValidRollNoFormat(norm.personalInfo.rollNo)) { norm.personalInfo.rollNo = '000-R00-X'; } localStorage.removeItem('personalInfo'); localStorage.setItem('personalInfo', JSON.stringify(norm.personalInfo)); } catch(e){} } if(norm.profilePhoto) { localStorage.removeItem('profilePhoto'); localStorage.setItem('profilePhoto', norm.profilePhoto); } else { localStorage.removeItem('profilePhoto'); } if(typeof appInstance.loadPersonalInfo === 'function') appInstance.loadPersonalInfo(); if(typeof appInstance.renderAchievements === 'function') appInstance.renderAchievements(); if(typeof appInstance.renderReflections === 'function') appInstance.renderReflections(); if(typeof appInstance.updateLinkedAchievements === 'function') appInstance.updateLinkedAchievements(); document.querySelectorAll('.section').forEach(s=>{ s.style.visibility='visible'; }); document.body.classList.remove('loading-initial'); const preEl = document.getElementById('preload-status'); if (preEl) preEl.remove(); window.__ADOPTED_SPECIFIC_PORTFOLIO = true; try { localStorage.setItem('__lastPortfolioFile', file); } catch(_){ } return true; } catch(e){ return false; } };
-        const _hasSpecificFile = !!(typeof window.__CURRENT_PORTFOLIO_FILE === 'string' && window.__CURRENT_PORTFOLIO_FILE);
-        let adoptionAttempts = 0;
-        function tryAdoptLoop(){ if (!_hasSpecificFile) return; if (window.app && typeof window.__ADOPT_PRELOADED==='function' && window.__PRELOADED_PORTFOLIO_DATA){ const ok = window.__ADOPT_PRELOADED(window.app); if (ok) { return; } } if (adoptionAttempts < 40) { adoptionAttempts++; setTimeout(tryAdoptLoop,150); } }
-        window.addEventListener('portfolio_data_ready', ()=>{ if (_hasSpecificFile) { tryAdoptLoop(); } });
-        window.addEventListener('pageshow', function(e){ if(!file) return; let stored = null; try { stored = localStorage.getItem('__lastPortfolioFile'); } catch(_){ } const mismatch = (stored && stored !== file); if (e.persisted || mismatch) { const refetchUrl = file.includes('?') ? `${file}&bf=${Date.now()}` : `${file}?bf=${Date.now()}`; fetch(refetchUrl, { cache:'no-store', headers:{'Cache-Control':'no-cache, no-store, must-revalidate','Pragma':'no-cache','Expires':'0'} }) .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }) .then(data => { window.__PRELOADED_PORTFOLIO_DATA = data; if (window.app && typeof window.__ADOPT_PRELOADED === 'function') { window.__ADOPT_PRELOADED(window.app); } }) .catch(err=>console.warn('[portfolio-loader] BFCache refetch failed', err)); } });
+        
+        // Enhanced adoption function with better error handling
+        window.__ADOPT_PRELOADED = function(appInstance){
+            try {
+                console.log('[portfolio-loader] Attempting to adopt preloaded data...');
+                
+                if(!window.__PRELOADED_PORTFOLIO_DATA){
+                    console.warn('[portfolio-loader] No preloaded data available to adopt');
+                    return false;
+                }
+                
+                if(!appInstance || typeof appInstance.normalizeLoadedData !== 'function'){
+                    console.warn('[portfolio-loader] App instance not ready for data adoption');
+                    return false;
+                }
+                
+                const norm = appInstance.normalizeLoadedData(window.__PRELOADED_PORTFOLIO_DATA);
+                console.log('[portfolio-loader] Normalized data:', {
+                    achievements: norm.achievements?.length || 0,
+                    reflections: norm.reflections?.length || 0
+                });
+                
+                // FORCE CLEAR any existing data first (critical for template-based portfolios)
+                appInstance.achievements = [];
+                appInstance.reflections = [];
+                
+                // Apply ONLY the new data from the specific JSON file
+                appInstance.achievements = norm.achievements || [];
+                appInstance.reflections = norm.reflections || [];
+                
+                // Handle personal info and profile photo specifically for template-based files
+                if(norm.personalInfo){
+                    try { 
+                        // Normalize roll number format before saving
+                        if(norm.personalInfo.rollNo && !isValidRollNoFormat(norm.personalInfo.rollNo)) {
+                            console.log('[portfolio-loader] Normalizing invalid roll number format:', norm.personalInfo.rollNo);
+                            norm.personalInfo.rollNo = '000-R00-X';
+                        }
+                        
+                        // Clear previous personal info completely
+                        localStorage.removeItem('personalInfo');
+                        localStorage.setItem('personalInfo', JSON.stringify(norm.personalInfo));
+                        console.log('[portfolio-loader] ✓ Set personal info for:', window.__CURRENT_PORTFOLIO_FILE);
+                    } catch(e){
+                        console.warn('[portfolio-loader] Failed to save personal info:', e);
+                    }
+                }
+                
+                // Clear and reload profile photo to prevent template contamination
+                if(norm.profilePhoto) {
+                    localStorage.removeItem('profilePhoto');
+                    localStorage.setItem('profilePhoto', norm.profilePhoto);
+                } else {
+                    localStorage.removeItem('profilePhoto');
+                }
+                
+                // Force UI refresh with new data & reveal
+                if(typeof appInstance.loadPersonalInfo === 'function') appInstance.loadPersonalInfo();
+                if(typeof appInstance.renderAchievements === 'function') appInstance.renderAchievements();
+                if(typeof appInstance.renderReflections === 'function') appInstance.renderReflections();
+                if(typeof appInstance.updateLinkedAchievements === 'function') appInstance.updateLinkedAchievements();
+                document.querySelectorAll('.section').forEach(s=>{ s.style.visibility='visible'; });
+                document.body.classList.remove('loading-initial');
+                // Remove loader panel now
+                const preEl = document.getElementById('preload-status'); if (preEl) preEl.remove();
+                
+                console.log('[portfolio-loader] ✓ Successfully adopted preloaded JSON from ?file=', file);
+                // Mark global flag so repo auto-loader will not override this data
+                window.__ADOPTED_SPECIFIC_PORTFOLIO = true;
+                // Persist sentinel so BFCache restores can detect mismatch and re-fetch
+                try { localStorage.setItem('__lastPortfolioFile', file); } catch(_){}
+                // In case constructor deferred rendering, ensure immediate UI update (already done above)
+                document.querySelectorAll('.section').forEach(s=>{ s.style.visibility='visible'; });
+                document.body.classList.remove('loading-initial');
+                const preEl2 = document.getElementById('preload-status'); if (preEl2) preEl2.remove();
+                return true;
+                
+            } catch(e){ 
+                console.error('[portfolio-loader] Adoption error:', e);
+                return false;
+            }
+        };
+
+                // Adoption retry logic when data becomes ready but app not yet constructed
+                let adoptionAttempts = 0;
+                function tryAdoptLoop(){
+                    if (window.app && typeof window.__ADOPT_PRELOADED==='function' && window.__PRELOADED_PORTFOLIO_DATA){
+                        const ok = window.__ADOPT_PRELOADED(window.app);
+                        if (ok) { console.log('[portfolio-loader] Adoption loop success'); return; }
+                    }
+                    if (adoptionAttempts < 40) { // ~6s (40*150ms)
+                        adoptionAttempts++; setTimeout(tryAdoptLoop,150);
+                    } else {
+                        console.warn('[portfolio-loader] Adoption timed out. Showing retry control.');
+                        const preEl = document.getElementById('preload-status');
+                        if (preEl) {
+                            preEl.textContent='Data loaded but adoption pending...';
+                            const r=document.createElement('button');
+                            r.textContent='Force Adopt';
+                            r.style.cssText='margin-left:10px;padding:4px 10px;font-size:12px;border:1px solid #0a66c2;background:#0a66c2;color:#fff;border-radius:6px;cursor:pointer;';
+                            r.onclick=()=>{ adoptionAttempts=0; preEl.textContent='Retrying adoption...'; tryAdoptLoop(); };
+                            preEl.appendChild(r);
+                        }
+                    }
+                }
+                window.addEventListener('portfolio_data_ready', ()=>{ console.log('[portfolio-loader] portfolio_data_ready event'); tryAdoptLoop(); });
+
+                // BFCache / back-forward navigation handling:
+        // If user visits file A, then file B (which clears storage), then navigates back to A (BFCache restore),
+        // the DOM shows A but localStorage reflects B. Detect and force a re-fetch so A's real data returns instantly.
+        window.addEventListener('pageshow', function(e){
+            if(!file) return;
+            let stored = null;
+            try { stored = localStorage.getItem('__lastPortfolioFile'); } catch(_){ }
+            const mismatch = (stored && stored !== file);
+            if (e.persisted || mismatch) {
+                console.log('[portfolio-loader] pageshow detected', { persisted:e.persisted, stored, expected:file, mismatch });
+                // Re-fetch with fresh cache buster and re-adopt
+                const refetchUrl = file.includes('?') ? `${file}&bf=${Date.now()}` : `${file}?bf=${Date.now()}`;
+                fetch(refetchUrl, { cache:'no-store', headers:{'Cache-Control':'no-cache, no-store, must-revalidate','Pragma':'no-cache','Expires':'0'} })
+                  .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+                  .then(data => {
+                      console.log('[portfolio-loader] BFCache/mismatch refetch success');
+                      window.__PRELOADED_PORTFOLIO_DATA = data;
+                      if (window.app && typeof window.__ADOPT_PRELOADED === 'function') {
+                          window.__ADOPT_PRELOADED(window.app);
+                      }
+                  })
+                  .catch(err=>console.warn('[portfolio-loader] BFCache refetch failed', err));
+            }
+        });
     })();
     </script>
     <!-- Header -->
@@ -597,8 +954,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="portfolio.js?v=20250925.3"></script>
     <script>
+    // After portfolio.js constructed the global app, adopt any preloaded JSON (if ?file= present) without breaking Drive logic.
     (function(){
-        async function tryAdopt() {
+        function tryAdopt() {
             if(window.app && typeof window.__ADOPT_PRELOADED === 'function'){
                 console.log('[portfolio-loader] App ready, attempting adoption...');
                 const success = window.__ADOPT_PRELOADED(window.app);
@@ -607,30 +965,8 @@
                 } else {
                     console.log('[portfolio-loader] ⚠ Data adoption failed or no data to adopt');
                 }
-                
-                // Check if we should auto-load from Drive for user mode
-                if (window.__AUTO_LOAD_FROM_DRIVE && window.app && typeof window.app.loadFromDrive === 'function') {
-                    console.log('[portfolio-loader] Auto-loading user portfolio from Drive...');
-                    try {
-                        await window.app.loadFromDrive();
-                        console.log('[portfolio-loader] ✓ Auto-load from Drive successful');
-                    } catch(e) {
-                        console.log('[portfolio-loader] ⚠ Auto-load from Drive failed:', e.message);
-                    }
-                    window.__AUTO_LOAD_FROM_DRIVE = false; // Prevent duplicate attempts
-                }
-                return; // Exit after processing
             } else {
-                // Limit retry attempts to prevent infinite loop
-                if (!window.__ADOPT_RETRY_COUNT) window.__ADOPT_RETRY_COUNT = 0;
-                window.__ADOPT_RETRY_COUNT++;
-                
-                if (window.__ADOPT_RETRY_COUNT > 200) { // Max 20 seconds of retries
-                    console.warn('[portfolio-loader] ⚠ Max retry attempts reached, stopping...');
-                    return;
-                }
-                
-                console.log(`[portfolio-loader] App or adoption function not ready yet, retrying... (${window.__ADOPT_RETRY_COUNT}/200)`);
+                console.log('[portfolio-loader] App or adoption function not ready yet, retrying...');
                 setTimeout(tryAdopt, 100); // retry in 100ms
             }
         }
@@ -640,23 +976,41 @@
     })();
     </script>
     <script>
+        // Debug helper: list CSS/JS hrefs and explicitly report whether the expected files loaded
         (async function(){
             try{
                 const cssLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(l=>l.href);
                 const scriptSrcs = Array.from(document.querySelectorAll('script[src]')).map(s=>s.src);
                 const stamp = document.getElementById('build-version');
+
                 const portfolioCssHref = cssLinks.find(h=>h && h.includes('portfolio.css')) || null;
                 const portfolioJsHref = scriptSrcs.find(s=>s && s.includes('portfolio.js')) || null;
+
                 if (stamp) {
+                    // Keep the visible stamp short and user-friendly; send full details to console
                     const cssStatus = portfolioCssHref ? 'OK' : 'MISSING';
                     const jsStatus = portfolioJsHref ? 'OK' : 'MISSING';
                     stamp.textContent = `${stamp.textContent} | CSS: ${cssStatus} | JS: ${jsStatus}`;
                 }
-                if (stamp) { stamp.textContent += ' | mode: external-json-only'; }
-            } catch (e) {}
+
+                // Full debug details remain in console for developers
+                console.debug('Debug: Loaded CSS links:', cssLinks);
+                console.debug('Debug: Loaded script sources:', scriptSrcs);
+                console.debug('Debug: portfolio.css presence (full href):', portfolioCssHref);
+                console.debug('Debug: portfolio.js presence (full src):', portfolioJsHref);
+
+                if (stamp) {
+                  stamp.textContent += ' | mode: external-json-only';
+                }
+
+            } catch (e) {
+                console.warn('debug helper failed', e);
+            }
         })();
     </script>
+<!-- Auth status UI for GIS -->
 <div id="auth-status" style="position:fixed;top:10px;right:180px;z-index:9999;background:#fff;padding:6px;border:1px solid #ccc;border-radius:6px;display:none;font-size:13px;"></div>
+<!-- Global Loading Bar (styles provided in portfolio.css) -->
 <div id="global-loading-bar"><div class="glb-progress"></div></div>
 <button id="authorize_button" style="display:block;position:fixed;top:10px;right:10px;z-index:9999;padding: 5px;">Sign in with Google</button>
 <button id="signout_button" style="display:none;position:fixed;top:40px;right:10px;z-index:9999;">Sign out</button>
@@ -667,19 +1021,161 @@
 <input type="file" id="import-json-input" accept="application/json" style="display:none" />
 <button id="drive-selftest" onclick="app.runDriveSelfTest()" style="display:none;position:fixed;top:190px;right:10px;z-index:9999;">Test Drive Sync</button>
 <script>
-const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) || window.GOOGLE_CLIENT_ID || 'YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+// Google Identity Services (GIS) + gapi.client integration
+const CLIENT_ID = '230626308317-ts08shmn77745hq81ghu5q7e2s2i0gf9.apps.googleusercontent.com';
+// Minimal scope: appDataFolder only (hidden per-user storage). Legacy migration handled manually via Import JSON.
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
-let tokenClient; let accessToken = null;
-async function initializeGisAndGapi() {
-    await new Promise(resolve => { if (window.gapi && gapi.client) return resolve(); gapi.load('client', async () => { try { await gapi.client.init({ discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] }); } catch(e){} resolve(); }); });
-    tokenClient = google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPES, callback: async (tokenResponse) => { if (tokenResponse && tokenResponse.access_token) { accessToken = tokenResponse.access_token; try { gapi.client.setToken({ access_token: accessToken }); } catch(_){} if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => updateAuthUIStateGIS(true)); } else { updateAuthUIStateGIS(true); } try { const isUserMode = sessionStorage.getItem('isUserMode') === 'true'; if (isUserMode && window.app && typeof window.app.loadFromDrive === 'function') { setTimeout(() => window.app.loadFromDrive(), 100); } } catch(e){} } }});
-    try { const isUserMode = sessionStorage.getItem('isUserMode') === 'true'; const userEmail = sessionStorage.getItem('userEmail'); const ssToken = sessionStorage.getItem('userToken'); if (isUserMode && userEmail && ssToken) { try { gapi.client.setToken({ access_token: ssToken }); accessToken = ssToken; if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', () => { updateAuthUIStateGIS(true); if (window.app && typeof window.app.loadFromDrive === 'function') { setTimeout(() => window.app.loadFromDrive(), 500); } }); } else { updateAuthUIStateGIS(true); if (window.app && typeof window.app.loadFromDrive === 'function') { setTimeout(() => window.app.loadFromDrive(), 500); } } } catch (e) {} tokenClient.requestAccessToken({ prompt: '' }); } } catch (e) {}
-    document.getElementById('authorize_button').addEventListener('click', () => { if (!tokenClient) return; tokenClient.requestAccessToken({ prompt: 'consent' }); });
-    document.getElementById('signout_button').addEventListener('click', () => { try { if (accessToken) { fetch('https://oauth2.googleapis.com/revoke?token=' + accessToken, { method: 'POST', headers: {'Content-type': 'application/x-www-form-urlencoded'} }).catch(()=>{}); accessToken = null; } if (typeof gapi !== 'undefined' && gapi.client) { gapi.client.setToken({}); } try { sessionStorage.clear(); localStorage.removeItem('userToken'); localStorage.removeItem('userEmail'); localStorage.removeItem('personalInfo'); localStorage.removeItem('profilePhoto'); } catch(_) {} if (window.RMU_AUTH && typeof RMU_AUTH.signOut === 'function') { RMU_AUTH.signOut().catch(()=>{}); } if (window.google && google.accounts && google.accounts.id) { try { google.accounts.id.disableAutoSelect(); } catch(_) {} } updateAuthUIStateGIS(false); setTimeout(() => { window.location.href = 'index.html'; }, 200); } catch(_) { setTimeout(() => { window.location.href = 'index.html'; }, 300); } });
-    const poll = setInterval(()=>{ try{ const token = gapi.client.getToken && gapi.client.getToken(); if (token && token.access_token) { accessToken = token.access_token; updateAuthUIStateGIS(true); clearInterval(poll); } }catch(e){} }, 700);
+
+let tokenClient;
+let accessToken = null;
+
+function gisHandleResponse(resp) {
+    console.log('GIS response', resp);
 }
-function updateAuthUIStateGIS(signedIn) { const statusDiv = document.getElementById('auth-status'); const authBtn = document.getElementById('authorize_button'); const signOutBtn = document.getElementById('signout_button'); const saveBtn = document.getElementById('save-drive'); const loadBtn = document.getElementById('load-drive'); const exportBtn = document.getElementById('export-json'); const importBtn = document.getElementById('import-json'); const importInput = document.getElementById('import-json-input'); const selftestBtn = document.getElementById('drive-selftest'); if (signedIn) { if (statusDiv) { statusDiv.innerText = 'Signed in (Drive access granted)'; statusDiv.style.display = 'block'; } if (authBtn) { authBtn.style.display = 'none'; } if (signOutBtn) { signOutBtn.style.display = 'inline-block'; } if (saveBtn) { saveBtn.style.setProperty('display','inline-block','important'); } if (loadBtn) { loadBtn.style.setProperty('display','inline-block','important'); } if (exportBtn) { exportBtn.style.setProperty('display','inline-block','important'); } if (importBtn) { importBtn.style.setProperty('display','inline-block','important'); } if (selftestBtn) { selftestBtn.style.setProperty('display','inline-block','important'); } if (importInput && !importInput._bound) { importInput.addEventListener('change', (e)=>{ const file = e.target.files && e.target.files[0]; if (file && window.app && typeof window.app.handleImportJsonFile === 'function') { window.app.handleImportJsonFile(file); e.target.value = ''; } }); importInput._bound = true; } } else { if (statusDiv) { statusDiv.style.display = 'none'; } if (authBtn) { authBtn.style.display = 'block'; } if (signOutBtn) { signOutBtn.style.display = 'none'; } if (saveBtn) { saveBtn.style.setProperty('display','none','important'); } if (loadBtn) { loadBtn.style.setProperty('display','none','important'); } if (exportBtn) { exportBtn.style.setProperty('display','none','important'); } if (importBtn) { importBtn.style.setProperty('display','none','important'); } if (selftestBtn) { selftestBtn.style.setProperty('display','none','important'); } } }
-window.addEventListener('load', () => { const check = setInterval(()=>{ if (window.google && window.gapi) { clearInterval(check); initializeGisAndGapi(); } }, 300); });
+
+function initializeGisAndGapi() {
+    // Check for existing user token from sessionStorage (user mode from index.html)
+    const existingUserToken = sessionStorage.getItem('userToken');
+    const isUserMode = sessionStorage.getItem('isUserMode');
+    
+    if(isUserMode === 'true' && existingUserToken) {
+        console.log('[Auth] User mode detected with existing token');
+        // Set up authentication with existing token
+        accessToken = existingUserToken;
+        gapi.client.setToken({access_token: accessToken});
+        window.accessToken = accessToken;
+        updateAuthUIStateGIS(true);
+        console.log('[Auth] User token from sessionStorage set on gapi.client');
+        return; // Don't set up interactive auth for user mode
+    }
+
+    // create the token client for interactive authentication
+    tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: async (tokenResponse) => {
+            if (tokenResponse.error) {
+                console.error('Token error', tokenResponse);
+                return;
+            }
+            accessToken = tokenResponse.access_token;
+            // Initialize gapi.client with the token
+            gapi.client.setToken({access_token: accessToken});
+            console.log('Access token set on gapi.client - User authenticated with appDataFolder scope');
+            updateAuthUIStateGIS(true);
+            // Persist minimal user-mode context so Drive features remain active across reloads
+            try {
+                sessionStorage.setItem('userToken', accessToken);
+                sessionStorage.setItem('isUserMode', 'true');
+            } catch(e) { console.warn('Could not persist user token to sessionStorage', e); }
+            
+            // Automatically load user's portfolio data from their private appDataFolder
+            try {
+                if (window.app && typeof window.app.loadFromDrive === 'function') {
+                    console.log('Auto-loading user portfolio from appDataFolder...');
+                    await window.app.loadFromDrive();
+                }
+            } catch (e) {
+                console.warn('Failed to auto-load portfolio on sign-in:', e);
+            }
+        }
+    });
+
+    // Attach button handlers
+    document.getElementById('authorize_button').addEventListener('click', () => {
+        if (!tokenClient) { console.error('tokenClient not ready'); return; }
+        // Request an access token; this may open a popup
+        tokenClient.requestAccessToken({prompt: 'consent'});
+    });
+
+    document.getElementById('signout_button').addEventListener('click', () => {
+        if (accessToken) {
+            // Revoke token
+            fetch('https://oauth2.googleapis.com/revoke?token=' + accessToken, {method: 'POST', headers: {'Content-type': 'application/x-www-form-urlencoded'}})
+            .then(() => {
+                accessToken = null;
+                gapi.client.setToken({});
+                updateAuthUIStateGIS(false);
+                console.log('Access token revoked');
+            }).catch(e => { console.error('Revoke error', e); });
+        }
+    });
+
+    // Also initialize gapi.client (discovery docs can be added when needed)
+    gapi.load('client', async () => {
+        try{
+            await gapi.client.init({});
+            console.log('gapi.client initialized');
+        }catch(e){ console.error('gapi.client.init error', e); }
+    });
+
+    // Poll to update UI (in case token established by popup)
+    const poll = setInterval(()=>{
+        try{
+            const token = gapi.client.getToken && gapi.client.getToken();
+            if (token && token.access_token) {
+                accessToken = token.access_token;
+                updateAuthUIStateGIS(true);
+                clearInterval(poll);
+            }
+        }catch(e){}
+    }, 700);
+}
+
+function updateAuthUIStateGIS(signedIn) {
+    const statusDiv = document.getElementById('auth-status');
+    const authBtn = document.getElementById('authorize_button');
+    const signOutBtn = document.getElementById('signout_button');
+    const saveBtn = document.getElementById('save-drive');
+    const loadBtn = document.getElementById('load-drive');
+    const exportBtn = document.getElementById('export-json');
+    const importBtn = document.getElementById('import-json');
+    const importInput = document.getElementById('import-json-input');
+    const selftestBtn = document.getElementById('drive-selftest');
+    if (signedIn) {
+        if (statusDiv) { statusDiv.innerText = 'Signed in (Drive access granted)'; statusDiv.style.display = 'block'; }
+        if (authBtn) { authBtn.style.display = 'none'; }
+        if (signOutBtn) { signOutBtn.style.display = 'inline-block'; }
+        if (saveBtn) { saveBtn.style.setProperty('display','inline-block','important'); }
+        if (loadBtn) { loadBtn.style.setProperty('display','inline-block','important'); }
+        if (exportBtn) { exportBtn.style.setProperty('display','inline-block','important'); }
+        if (importBtn) { importBtn.style.setProperty('display','inline-block','important'); }
+        if (selftestBtn) { selftestBtn.style.setProperty('display','inline-block','important'); }
+        if (importInput && !importInput._bound) {
+            importInput.addEventListener('change', (e)=>{
+                const file = e.target.files && e.target.files[0];
+                if (file && window.app && typeof window.app.handleImportJsonFile === 'function') {
+                    window.app.handleImportJsonFile(file);
+                    e.target.value = '';
+                }
+            });
+            importInput._bound = true;
+        }
+        console.log('Auth UI updated: signedIn true - save/load buttons shown (forced)');
+    } else {
+        if (statusDiv) { statusDiv.style.display = 'none'; }
+        if (authBtn) { authBtn.style.display = 'block'; }
+        if (signOutBtn) { signOutBtn.style.display = 'none'; }
+        if (saveBtn) { saveBtn.style.setProperty('display','none','important'); }
+        if (loadBtn) { loadBtn.style.setProperty('display','none','important'); }
+        if (exportBtn) { exportBtn.style.setProperty('display','none','important'); }
+        if (importBtn) { importBtn.style.setProperty('display','none','important'); }
+        if (selftestBtn) { selftestBtn.style.setProperty('display','none','important'); }
+        console.log('Auth UI updated: signedIn false - save/load buttons hidden (forced)');
+    }
+}
+
+// Initialize when GIS script is ready
+window.addEventListener('load', () => {
+    console.log('window.load: waiting for GIS and gapi');
+    const check = setInterval(()=>{
+        if (window.google && google.accounts && window.gapi) {
+            console.log('GIS and gapi detected, initializing');
+            clearInterval(check);
+            initializeGisAndGapi();
+        }
+    }, 300);
+});
 </script>
 
 <!-- Authentication Modal Overlays -->
@@ -697,7 +1193,6 @@ window.addEventListener('load', () => { const check = setInterval(()=>{ if (wind
     .rmu-save-btn:hover{transform:translateY(-1px) !important;box-shadow:0 6px 16px -4px rgba(110,28,23,.5) !important;background:linear-gradient(135deg,#55120f 0%,#6e1c17 100%) !important}
     #save-to-server{display:inline-flex;align-items:center;gap:6px}
     body.signed-in #save-to-server{display:inline-flex !important}
-    /* nav-signout removed */
 </style>
 
 <!-- Student Sign-In Modal -->
@@ -725,6 +1220,7 @@ window.addEventListener('load', () => { const check = setInterval(()=>{ if (wind
 </div>
 
 <script>
+// Save to Server Integration
 (function(){
     const saveBtn = document.getElementById('save-to-server');
     const authOverlay = document.getElementById('auth-overlay');
@@ -751,42 +1247,29 @@ window.addEventListener('load', () => { const check = setInterval(()=>{ if (wind
     
     async function signInAndSave() {
         try {
+            if(typeof gapi === 'undefined') {
+                setAuthError('Google API not loaded. Please refresh and try again.');
+                return;
+            }
+            
             showAuthOverlay(false);
             showSaveModal(true, 'Signing in...');
             
-            let signedIn = false;
-            // Prefer RMU_AUTH (GIS) for token and email
-            if (window.RMU_AUTH && typeof RMU_AUTH.authenticateUser === 'function') {
-                try {
-                    const res = await RMU_AUTH.authenticateUser();
-                    if (res && res.token) {
-                        window.__USER_TOKEN = res.token;
-                        if (res.email) window.__USER_EMAIL = res.email;
-                        document.body.classList.add('signed-in');
-                        signedIn = true;
-                    }
-                } catch(e) {
-                    console.warn('[Save] RMU_AUTH auth failed, will try gapi if available', e);
-                }
+            // Initialize gapi.auth2 if needed
+            await new Promise(resolve => gapi.load('auth2', resolve));
+            let authInstance = gapi.auth2.getAuthInstance();
+            if(!authInstance) {
+                const config = window.RMU_CONFIG || {};
+                authInstance = await gapi.auth2.init({
+                    client_id: config.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID,
+                    scope: config.OAUTH_SCOPES || 'profile email openid'
+                });
             }
             
-            if (!signedIn) {
-                // Fallback to gapi.auth2 if present
-                if (typeof gapi === 'undefined') {
-                    throw new Error('Google API not loaded. Please refresh and try again.');
-                }
-                await new Promise(resolve => gapi.load('auth2', resolve));
-                let authInstance = gapi.auth2.getAuthInstance();
-                if(!authInstance) {
-                    const config = window.RMU_CONFIG || {};
-                    authInstance = await gapi.auth2.init({
-                        client_id: config.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID,
-                        scope: config.OAUTH_SCOPES || 'profile email openid'
-                    });
-                }
-                await authInstance.signIn();
-                document.body.classList.add('signed-in');
-            }
+            // Sign in
+            await authInstance.signIn();
+            
+            document.body.classList.add('signed-in');
             await performSave();
             
         } catch(err) {
@@ -797,172 +1280,121 @@ window.addEventListener('load', () => { const check = setInterval(()=>{ if (wind
         }
     }
     
-    async function getDriveAccessTokenPreferred(options = {}) {
-        const interactive = !!options.interactive;
-        try {
-            // If gapi client already holds a token, use it
-            if (window.gapi && gapi.client && typeof gapi.client.getToken === 'function') {
-                const t = gapi.client.getToken();
-                if (t && t.access_token) return t.access_token;
-            }
-            // If a token client exists, request a token (silent first, then interactive when requested)
-            if (window.tokenClient) {
-                return await new Promise((resolve) => {
-                    const originalCb = window.tokenClient.callback;
-                    window.tokenClient.callback = (resp) => {
-                        try {
-                            if (resp && resp.access_token) {
-                                // gapi.client.setToken will be called by existing init code; return the token
-                                resolve(resp.access_token);
-                            } else {
-                                resolve(null);
-                            }
-                        } finally {
-                            // Restore original callback to avoid side effects
-                            window.tokenClient.callback = originalCb;
-                        }
-                    };
-                    window.tokenClient.requestAccessToken({ prompt: interactive ? 'consent' : '' });
-                });
-            }
-        } catch(_) { /* fall through */ }
-        return null;
-    }
-
     async function performSave() {
         try {
             const cfg = window.RMU_CONFIG || {};
             const base = (cfg.BACKEND_BASE || '').replace(/\/$/, '');
-
-            if (!base) throw new Error('Backend not configured. Please check config.js');
-            if (!window.app) throw new Error('Portfolio not initialized');
-
+            
+            if(!base) {
+                throw new Error('Backend not configured. Please check config.js');
+            }
+            
+            if(!window.app) {
+                throw new Error('Portfolio not initialized');
+            }
+            
             showSaveModal(true, 'Preparing portfolio data...');
-
-            // Helpers
-            const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim());
-            const sanitizeFilename = (s) => {
-                const cleaned = String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9\-_. ]/g,'-').replace(/\s+/g,'-').replace(/-+/g,'-').replace(/^[-.]+|[-.]+$/g,'');
-                return cleaned.slice(0, 80) || 'portfolio';
-            };
-
-            // Gather personal info and compute email robustly
-            const personal = (() => { try { return JSON.parse(localStorage.getItem('personalInfo')||'{}'); } catch(_) { return {}; } })();
-            const emailCandidates = [
-                personal.email,
-                window.RMU_AUTH?.getCurrentUserEmail?.(),
-                window.__USER_EMAIL,
-                (()=>{ try { return sessionStorage.getItem('userEmail'); } catch(_) { return null; } })()
-            ].filter(Boolean);
-            const email = (emailCandidates.find(isValidEmail) || '').toLowerCase();
-            if (!email) {
-                throw new Error('No valid email found. Please sign in and ensure your email is set in Personal Info.');
-            }
-
-            // Roll number for metadata/filename
-            const roll = personal.rollNo || personal.roll || '';
-
-            // Derive a stable filename
-            const studentName = personal.studentName || personal.fullName || [personal.firstName, personal.lastName].filter(Boolean).join(' ') || '';
-            const rollNo = roll || '';
-            let filename;
-            if (studentName && rollNo) filename = `${studentName}-${rollNo}`; else if (studentName) filename = `${studentName}-portfolio`; else filename = `user-${email.split('@')[0]}`;
-            filename = sanitizeFilename(filename.toLowerCase());
-
-            // Normalize portfolio payload shape expected by backend
-            const achievements = Array.isArray(app.achievements) ? app.achievements : [];
-            const reflections = Array.isArray(app.reflections) ? app.reflections : [];
-            // Ensure personal includes the chosen email
-            if (!personal.email || personal.email.toLowerCase() !== email) {
-                personal.email = email;
-                try { localStorage.setItem('personalInfo', JSON.stringify(personal)); } catch(_) {}
-            }
-            const portfolioPayload = {
-                achievements,
-                reflections,
-                personalInfo: personal && typeof personal === 'object' ? personal : {},
-                profilePhoto: localStorage.getItem('profilePhoto') || null
-            };
-
-            // Final payload
-            const payload = { roll, email, filename, portfolio: portfolioPayload };
-
-            showSaveModal(true, 'Obtaining credentials...');
-
-            // Get backend auth token:
-            // Avoid One Tap ID token flow (can cause 400 error in some contexts). Prefer GIS token client (access token),
-            // then fall back to any cached/session token, then gapi.auth2.
-            let accessToken = null;
-            let idToken = null;
-
-            if (window.RMU_AUTH && typeof RMU_AUTH.authenticateUser === 'function') {
-                try {
-                    const res = await RMU_AUTH.authenticateUser();
-                    accessToken = res?.token || null;
-                    if (res?.email) { window.__USER_EMAIL = res.email; }
-                } catch(_) { /* will try fallbacks below */ }
-            }
-
-            if (!accessToken) {
-                try { accessToken = sessionStorage.getItem('userToken'); } catch(_) {}
-            }
-            if (!accessToken && window.__USER_TOKEN) {
-                accessToken = window.__USER_TOKEN;
-            }
-            if (!accessToken && typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance) {
+            
+            // Build payload
+            const personal = JSON.parse(localStorage.getItem('personalInfo') || '{}');
+            
+            // Get email from gapi.auth2
+            let email = personal.email || '';
+            if(typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
                 const authInstance = gapi.auth2.getAuthInstance();
-                if (authInstance) {
-                    const user = authInstance.currentUser.get();
-                    if (user && user.isSignedIn()) {
-                        const authResponse = user.getAuthResponse();
-                        accessToken = authResponse?.access_token || null;
-                        idToken = authResponse?.id_token || authResponse?.idToken || null;
-                    }
+                const user = authInstance.currentUser.get();
+                if(user && user.isSignedIn()) {
+                    const profile = user.getBasicProfile();
+                    email = profile.getEmail() || email;
                 }
             }
-            const authToken = accessToken || idToken;
-            if (!authToken) throw new Error('Unable to obtain authentication token. Please sign in again.');
-
+            
+            const roll = personal.rollNo || personal.roll || '';
+            
+            // Generate standardized filename using student name and roll number
+            console.log('[Save] Generating filename from personal info:', personal);
+            
+            const studentName = personal.studentName || personal.fullName || 
+                              [personal.firstName, personal.lastName].filter(Boolean).join(' ') || '';
+            const rollNo = personal.rollNo || personal.roll || roll || '';
+            
+            console.log('[Save] Using studentName:', studentName, 'rollNo:', rollNo);
+            
+            let filename;
+            if (studentName && rollNo) {
+                // Both name and roll available - ideal format
+                const cleanName = studentName.replace(/[^A-Za-z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
+                const cleanRoll = rollNo.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
+                filename = `${cleanName}-${cleanRoll}`;
+                console.log('[Save] ✅ Generated full filename:', filename);
+            } else if (studentName) {
+                // Only name available
+                const cleanName = studentName.replace(/[^A-Za-z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
+                filename = `${cleanName}-portfolio`;
+                console.log('[Save] ⚠️ Generated name-only filename:', filename);
+            } else {
+                // Fallback to email-based naming
+                const emailBase = email ? email.split('@')[0] : 'unknown-user';
+                filename = rollNo ? `student-${rollNo}` : `user-${emailBase}`;
+                console.log('[Save] 🔄 Using fallback filename:', filename);
+            }
+            
+            const payload = {
+                roll: roll,
+                email: email,
+                filename: filename,
+                portfolio: {
+                    achievements: app.achievements || [],
+                    reflections: app.reflections || [],
+                    personalInfo: personal,
+                    profilePhoto: localStorage.getItem('profilePhoto') || null
+                }
+            };
+            
             showSaveModal(true, 'Saving to server...');
-
+            
+            // Get ID token from gapi.auth2
+            let idToken = null;
+            if(typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
+                const authInstance = gapi.auth2.getAuthInstance();
+                const user = authInstance.currentUser.get();
+                if(user && user.isSignedIn()) {
+                    const authResponse = user.getAuthResponse();
+                    idToken = authResponse.id_token || authResponse.idToken;
+                }
+            }
+            
+            if(!idToken) {
+                throw new Error('Unable to obtain authentication token');
+            }
+            
             const response = await fetch(base + '/api/save', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-                body: JSON.stringify({
-                    ...payload,
-                    metadata: {
-                        userAgent: navigator.userAgent,
-                        timestamp: new Date().toISOString(),
-                        source: 'portfolio-website',
-                        version: '1.0'
-                    }
-                }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + idToken
+                },
+                body: JSON.stringify(payload),
                 credentials: 'omit',
                 cache: 'no-store'
             });
-
-            if (!response.ok) {
+            
+            if(!response.ok) {
                 const errorText = await response.text().catch(() => response.statusText);
-                // Common backend validations mapped to friendlier messages
-                if (/Invalid\s+email/i.test(errorText)) throw new Error('Your email looks invalid. Please update it in Personal Info or sign in again.');
-                if (/Invalid\s+portfolio/i.test(errorText)) throw new Error('Your portfolio data is not in the expected format. Try making a small edit and saving again.');
-                if (/(storage\s+quota|quota\s+exceeded|insufficient\s+storage|temporarily\s+full|storage\s+full|out\s+of\s+space)/i.test(errorText)) {
-                    throw new Error('Storage temporarily unavailable on the server. Please try again later or contact the administrator.');
-                }
-                if (/(Access\s+denied|Forbidden|permissions|unauthorized|unauthorised|invalid token|invalid signature)/i.test(errorText)) throw new Error('Access denied. Make sure you are using the same account you signed in with.');
                 throw new Error('Server error: ' + errorText);
             }
-
-            const result = await response.json().catch(() => ({ success: false }));
-            if (result && result.success) {
+            
+            const result = await response.json().catch(() => ({success: false}));
+            
+            if(result && result.success) {
                 showSaveModal(true, 'Portfolio saved successfully!' + (result.fileId ? ` (ID: ${result.fileId})` : ''));
                 saveCancel.style.display = 'inline-block';
                 saveCancel.onclick = () => showSaveModal(false);
             } else {
-                throw new Error(result?.error || 'Unknown server error');
+                throw new Error(result.error || 'Unknown server error');
             }
-
-        } catch (err) {
+            
+        } catch(err) {
             console.error('Save error:', err);
             showSaveModal(true, 'Save failed: ' + (err.message || err));
             saveCancel.style.display = 'inline-block';
@@ -995,18 +1427,23 @@ window.addEventListener('load', () => { const check = setInterval(()=>{ if (wind
     // Show save button when signed in
     function checkSignInStatus() {
         let isSignedIn = false;
-        // Check session user mode
-        try { isSignedIn = isSignedIn || (sessionStorage.getItem('isUserMode') === 'true' && !!sessionStorage.getItem('userEmail')); } catch(_) {}
-        // Check RMU_AUTH
-        if(!isSignedIn && window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
+        
+        // Check RMU_AUTH first
+        if(window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
             isSignedIn = true;
         }
+        
         // Check gapi.auth2
         if(!isSignedIn && typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
             const authInstance = gapi.auth2.getAuthInstance();
             isSignedIn = authInstance.isSignedIn.get();
         }
-        document.body.classList.toggle('signed-in', !!isSignedIn);
+        
+        if(isSignedIn) {
+            document.body.classList.add('signed-in');
+        } else {
+            document.body.classList.remove('signed-in');
+        }
     }
     
     // Check initial sign-in status
@@ -1095,6 +1532,7 @@ window.addEventListener('load', () => { const check = setInterval(()=>{ if (wind
 </style>
 
 <script>
+// Roll Number Validation System for Portfolio
 (function() {
     'use strict';
     

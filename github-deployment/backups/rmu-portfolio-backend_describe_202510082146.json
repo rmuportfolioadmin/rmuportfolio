@@ -1,0 +1,136 @@
+{
+  "apiVersion": "serving.knative.dev/v1",
+  "kind": "Service",
+  "metadata": {
+    "annotations": {
+      "run.googleapis.com/build-enable-automatic-updates": "false",
+      "run.googleapis.com/build-id": "558ff665-98ff-4e9c-9580-5a5f49817e81",
+      "run.googleapis.com/build-image-uri": "us-central1-docker.pkg.dev/rmu-portfolio-admin/cloud-run-source-deploy/rmu-portfolio-backend",
+      "run.googleapis.com/build-name": "projects/738776771863/locations/us-central1/builds/558ff665-98ff-4e9c-9580-5a5f49817e81",
+      "run.googleapis.com/build-source-location": "gs://run-sources-rmu-portfolio-admin-us-central1/services/rmu-portfolio-backend/1759846456.144579-d0bf306af0654749b5234847457eea9b.zip#1759846456493205",
+      "run.googleapis.com/client-name": "gcloud",
+      "run.googleapis.com/client-version": "541.0.0",
+      "run.googleapis.com/ingress": "all",
+      "run.googleapis.com/ingress-status": "all",
+      "run.googleapis.com/operation-id": "fb944408-970b-4e00-9a91-fad0e70b1d50",
+      "run.googleapis.com/urls": "[\"https://rmu-portfolio-backend-738776771863.us-central1.run.app\",\"https://rmu-portfolio-backend-y34qi74twq-uc.a.run.app\"]",
+      "serving.knative.dev/creator": "rmuportfolioa@gmail.com",
+      "serving.knative.dev/lastModifier": "rmuportfolioa@gmail.com"
+    },
+    "creationTimestamp": "2025-10-04T06:25:12.707296Z",
+    "generation": 34,
+    "labels": {
+      "cloud.googleapis.com/location": "us-central1"
+    },
+    "name": "rmu-portfolio-backend",
+    "namespace": "738776771863",
+    "resourceVersion": "AAZAkjN34iI",
+    "selfLink": "/apis/serving.knative.dev/v1/namespaces/738776771863/services/rmu-portfolio-backend",
+    "uid": "3e235f2d-83f0-494c-b951-d1027057ee35"
+  },
+  "spec": {
+    "template": {
+      "metadata": {
+        "annotations": {
+          "autoscaling.knative.dev/maxScale": "10",
+          "run.googleapis.com/client-name": "gcloud",
+          "run.googleapis.com/client-version": "541.0.0",
+          "run.googleapis.com/execution-environment": "gen2",
+          "run.googleapis.com/startup-cpu-boost": "true"
+        },
+        "labels": {
+          "client.knative.dev/nonce": "ppsxlxwanx",
+          "run.googleapis.com/startupProbeType": "Default"
+        }
+      },
+      "spec": {
+        "containerConcurrency": 80,
+        "containers": [
+          {
+            "env": [
+              {
+                "name": "GOOGLE_CLIENT_ID",
+                "value": "738776771863-5558mme9unmotsk8bnhlrmb5sq4b2qnr.apps.googleusercontent.com"
+              },
+              {
+                "name": "ORIGIN",
+                "value": "https://rmuportfolioadmin.github.io"
+              },
+              {
+                "name": "ADMIN_EMAIL",
+                "value": "rmuportfolioa@gmail.com"
+              },
+              {
+                "name": "DRIVE_PARENT_FOLDER_ID",
+                "value": "1mhOmMsq913sNiHbRc2xr7R4eBbQlryMa"
+              }
+            ],
+            "image": "us-central1-docker.pkg.dev/rmu-portfolio-admin/cloud-run-source-deploy/rmu-portfolio-backend@sha256:c135c2f10844cead176a3476a6f169ff8f2cf15cd47d560503f3cb42500d2d24",
+            "name": "rmu-portfolio-backend-1",
+            "ports": [
+              {
+                "containerPort": 8080,
+                "name": "http1"
+              }
+            ],
+            "resources": {
+              "limits": {
+                "cpu": "1",
+                "memory": "512Mi"
+              }
+            },
+            "startupProbe": {
+              "failureThreshold": 1,
+              "periodSeconds": 240,
+              "tcpSocket": {
+                "port": 8080
+              },
+              "timeoutSeconds": 240
+            }
+          }
+        ],
+        "serviceAccountName": "rmu-portfolio-backend@rmu-portfolio-admin.iam.gserviceaccount.com",
+        "timeoutSeconds": 30
+      }
+    },
+    "traffic": [
+      {
+        "latestRevision": true,
+        "percent": 100
+      }
+    ]
+  },
+  "status": {
+    "address": {
+      "url": "https://rmu-portfolio-backend-y34qi74twq-uc.a.run.app"
+    },
+    "conditions": [
+      {
+        "lastTransitionTime": "2025-10-07T14:15:33.161506Z",
+        "status": "True",
+        "type": "Ready"
+      },
+      {
+        "lastTransitionTime": "2025-10-07T14:15:32.004927Z",
+        "status": "True",
+        "type": "ConfigurationsReady"
+      },
+      {
+        "lastTransitionTime": "2025-10-07T14:15:33.121619Z",
+        "status": "True",
+        "type": "RoutesReady"
+      }
+    ],
+    "latestCreatedRevisionName": "rmu-portfolio-backend-00034-fx4",
+    "latestReadyRevisionName": "rmu-portfolio-backend-00034-fx4",
+    "observedGeneration": 34,
+    "traffic": [
+      {
+        "latestRevision": true,
+        "percent": 100,
+        "revisionName": "rmu-portfolio-backend-00034-fx4"
+      }
+    ],
+    "url": "https://rmu-portfolio-backend-y34qi74twq-uc.a.run.app"
+  }
+}
