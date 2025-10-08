@@ -80,17 +80,20 @@
       const frag = document.createDocumentFragment();
       const endIndex = Math.min(startIndex + BATCH_SIZE, totalItems);
       
+      let renderedCount = 0;
       for(let i = startIndex; i < endIndex; i++) {
-        const m = filtered[i];
+        const m = filtered[i] || {};
+        // Determine link target; skip entries with no usable reference
+        const inVc = !!(window.__VC_MODE && window.__REMOTE_PORTFOLIO_BASE);
+        const fileRef = inVc ? (m.id || m.file || '') : (m.file || '');
+        if(!fileRef){ continue; }
         const a = document.createElement('a');
         // Add timestamp to force fresh loading and prevent cache
         const timestamp = Date.now();
-        if(window.__VC_MODE && window.__REMOTE_PORTFOLIO_BASE){
-          // In VC mode, use Drive file id if available; inline loader will fetch via backend
-          const driveRef = m.id || m.file;
-          a.href = `portfolio.html?driveFile=${encodeURIComponent(driveRef)}&t=${timestamp}`;
+        if(inVc){
+          a.href = `portfolio.html?driveFile=${encodeURIComponent(fileRef)}&t=${timestamp}`;
         } else {
-          a.href = `portfolio.html?file=${encodeURIComponent(m.file)}&t=${timestamp}`;
+          a.href = `portfolio.html?file=${encodeURIComponent(fileRef)}&t=${timestamp}`;
         }
         a.className = 'gal-row';
         a.setAttribute('role','listitem');
@@ -101,7 +104,7 @@
         left.className = 'row-left';
         const fileEl = document.createElement('div');
         fileEl.className = 'row-file';
-        fileEl.textContent = m.file.replace(/^data\//,'');  // Show filename only
+        fileEl.textContent = (m.file ? String(m.file).replace(/^data\//,'') : String(fileRef));
         const nameEl = document.createElement('div');
         nameEl.className = 'row-name';
         nameEl.textContent = m.name || 'untitled';  // Show filename as name
@@ -123,6 +126,7 @@
           if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); a.click(); }
         });
         frag.appendChild(a);
+        renderedCount++;
       }
       
       grid.appendChild(frag);
@@ -137,8 +141,8 @@
       }
     }
     
-    // Start rendering
-    renderBatch(0);
+  // Start rendering
+  renderBatch(0);
     
     // Immediate count update for small datasets
     if(totalItems <= 200 && countEl) {
@@ -167,6 +171,13 @@
       });
       
       render();
+      // If nothing rendered due to missing file refs, show helper message
+      if((grid && !grid.children.length) && metaList.length){
+        const info = document.createElement('div');
+        info.className = 'gal-empty';
+        info.innerHTML = '<strong>Portfolios could not be listed</strong><span>files.json entries are missing "file" or "id" fields.</span>';
+        grid.appendChild(info);
+      }
     }, metaList.length > 100 ? 300 : 150); // Longer debounce for large datasets
   }
 
