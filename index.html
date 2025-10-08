@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Portfolio Gallery</title>
   <meta name="description" content="Gallery of medical student portfolios" />
+  <link rel="icon" type="image/png" href="RMUlogo.png" />
     <meta name="referrer" content="no-referrer" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com https://accounts.google.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://apis.google.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://*.run.app; frame-src https://accounts.google.com; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
   <link id="css-gallery" rel="stylesheet" href="gallery.css?v=20250928.1" />
@@ -72,8 +73,40 @@
   </script>
   <script src="config.js" defer></script>
   <script src="auth.js" defer></script>
+  <!-- Google Identity Services for student sign-in (used by stuSignIn) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="theme-rmu">
+  <!-- Welcome Modal with Authentication Options (used by existing JS handlers) -->
+  <style>
+    .welcome-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:saturate(1.2) blur(8px);display:none;align-items:center;justify-content:center;z-index:10001}
+    .welcome-modal{width:min(560px,92vw);background:#fff;border-radius:20px;border:2px solid #d4b071;box-shadow:0 32px 80px -16px rgba(110,28,23,.45);padding:32px;text-align:center}
+    .welcome-header{margin-bottom:24px}
+    .welcome-logo{width:80px;height:80px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#6e1c17,#55120f);display:flex;align-items:center;justify-content:center}
+    .welcome-title{font:700 24px Inter,system-ui,sans-serif;color:#6e1c17;margin:0 0 8px;letter-spacing:-0.5px}
+    .welcome-subtitle{font:500 16px Inter,system-ui,sans-serif;color:#8b4513;margin:0 0 20px}
+    .welcome-desc{font:14px/1.6 Inter,system-ui,sans-serif;color:#5d4037;margin-bottom:28px;max-width:460px;margin-left:auto;margin-right:auto}
+    .welcome-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+    .welcome-btn{appearance:none;border:0;border-radius:12px;padding:12px 20px;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;transition:all .3s ease;min-width:140px}
+    .welcome-btn-primary{background:linear-gradient(135deg,#6e1c17 0%,#55120f 100%);color:#fff;border:2px solid #55120f}
+    .welcome-btn-ghost{background:rgba(110,28,23,.08);color:#6e1c17;border:2px solid #d4b071}
+    .welcome-btn:hover{transform:translateY(-1px)}
+  </style>
+  <div id="welcome-overlay" class="welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+    <div class="welcome-modal">
+      <div class="welcome-header">
+        <div class="welcome-logo"><img src="RMUlogo.png" alt="RMU Logo" style="width:60px;height:60px;object-fit:contain;border-radius:12px"/></div>
+        <h1 class="welcome-title" id="welcome-title">Welcome to RMU Portfolio</h1>
+        <p class="welcome-subtitle">Rawalpindi Medical University</p>
+      </div>
+      <p class="welcome-desc">Sign in with Google to access your personal portfolio, or continue without signing in to view the demo portfolio.</p>
+      <div class="welcome-actions">
+        <button id="welcome-signin" class="welcome-btn welcome-btn-primary">Sign in with Google</button>
+        <button id="welcome-continue" class="welcome-btn welcome-btn-ghost">Continue without sign in</button>
+      </div>
+      <div id="welcome-loading" class="welcome-loading" style="display:none;margin-top:14px;font:14px Inter,system-ui,sans-serif;color:#8b4513">Loading data…</div>
+    </div>
+  </div>
   <!-- VC Sign-In Modal Overlay -->
   <style>
     .vc-overlay{position:fixed;inset:0;background:rgba(10,20,40,.55);backdrop-filter:saturate(1.1) blur(3px);display:none;align-items:center;justify-content:center;z-index:10000}
