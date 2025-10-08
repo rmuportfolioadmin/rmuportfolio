@@ -3,13 +3,17 @@
 // Falls back gracefully if files.json missing.
 
 (function(){
-  const grid = document.getElementById('gallery-grid');
-  const statusBar = document.getElementById('status-bar');
-  const searchBox = document.getElementById('search-box');
-  const countEl = document.getElementById('count');
-  const scanToggle = document.getElementById('scan-toggle');
-  const scanProgress = document.getElementById('scan-progress');
-  const scanBar = document.getElementById('scan-progress-bar');
+  // Bind DOM elements after DOMContentLoaded to avoid nulls when script loads early
+  let grid, statusBar, searchBox, countEl, scanToggle, scanProgress, scanBar;
+  function bindDom(){
+    grid = document.getElementById('gallery-grid');
+    statusBar = document.getElementById('status-bar');
+    searchBox = document.getElementById('search-box');
+    countEl = document.getElementById('count');
+    scanToggle = document.getElementById('scan-toggle');
+    scanProgress = document.getElementById('scan-progress');
+    scanBar = document.getElementById('scan-progress-bar');
+  }
   let metaList = []; // full list
   let filtered = [];
 
@@ -385,19 +389,26 @@
 
   // firstImage removed (no longer needed)
 
-  if(searchBox){ searchBox.addEventListener('input', applyFilter); }
-  if(scanToggle){
-    scanToggle.addEventListener('change', ()=>{
-      if(!scanToggle.checked){
-        enumAborted = true;
-        showProgress(false);
-        setStatus('Auto scan disabled.');
-      } else {
-        enumAborted = false;
-        if(!metaList.length){ scheduleEnumerationFallback(); }
-      }
-    });
+  function init(){
+    bindDom();
+    // Attach listeners now that DOM is ready
+    if(searchBox){ searchBox.addEventListener('input', applyFilter); }
+    if(scanToggle){
+      scanToggle.addEventListener('change', ()=>{
+        if(!scanToggle.checked){
+          enumAborted = true;
+          showProgress(false);
+          setStatus('Auto scan disabled.');
+        } else {
+          enumAborted = false;
+          if(!metaList.length){ scheduleEnumerationFallback(); }
+        }
+      });
+    }
+    loadIndex();
   }
-  loadIndex();
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
   // Note: Chrome "Intervention" message about lazy images is informational only; we intentionally use native lazy-loading.
 })();
