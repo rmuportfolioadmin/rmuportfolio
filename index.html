@@ -360,66 +360,35 @@
             try{
               const CLIENT_ID = window.GOOGLE_CLIENT_ID;
               const SCOPES = 'https://www.googleapis.com/auth/drive.appdata openid email profile';
-              // Prefer modern GIS token client for reliability on GitHub Pages
-              if(window.google && google.accounts && google.accounts.oauth2){
-                const tokenClient = google.accounts.oauth2.initTokenClient({
-                  client_id: CLIENT_ID,
-                  scope: SCOPES,
-                  callback: async (tokenResponse) => {
-                    try{
-                      if(tokenResponse && tokenResponse.access_token){
-                        let email = '';
-                        try {
-                          // Fetch userinfo to capture email (optional)
-                          const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tokenResponse.access_token } });
-                          if(r.ok){ const info = await r.json(); email = (info && (info.email||'')) || ''; }
-                        } catch(_) { /* non-fatal */ }
-                        try{
-                          sessionStorage.setItem('isUserMode','true');
-                          if(email) sessionStorage.setItem('userEmail', String(email));
-                          sessionStorage.setItem('userToken', String(tokenResponse.access_token));
-                        }catch(_){ }
-                        window.location.href = 'portfolio.html?user=1';
-                      } else {
-                        setStuErr('Google did not return an access token. Please try again.');
-                      }
-                    }catch(e){ setStuErr('Sign-in handling failed.'); }
-                  }
-                });
-                try { tokenClient.requestAccessToken({ prompt: 'consent' }); return; } catch (e) {
-                  console.warn('GIS token request failed, falling back to gapi.auth2', e);
+              // GIS-only flow to avoid redirect_uri_mismatch
+              if(!(window.google && google.accounts && google.accounts.oauth2)){
+                setStuErr('Google Sign-In is still loading. Please wait a few seconds and try again.');
+                return;
+              }
+              const tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: async (tokenResponse) => {
+                  try{
+                    if(tokenResponse && tokenResponse.access_token){
+                      let email = '';
+                      try {
+                        const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tokenResponse.access_token } });
+                        if(r.ok){ const info = await r.json(); email = (info && (info.email||'')) || ''; }
+                      } catch(_) { /* non-fatal */ }
+                      try{
+                        sessionStorage.setItem('isUserMode','true');
+                        if(email) sessionStorage.setItem('userEmail', String(email));
+                        sessionStorage.setItem('userToken', String(tokenResponse.access_token));
+                      }catch(_){ }
+                      window.location.href = 'portfolio.html?user=1';
+                    } else {
+                      setStuErr('Google did not return an access token. Please try again.');
+                    }
+                  }catch(e){ setStuErr('Sign-in handling failed.'); }
                 }
-              }
-
-              // Fallback to legacy gapi.auth2 if GIS path unavailable
-              if(typeof gapi==='undefined'){ setStuErr('Google API not loaded yet. Please wait a moment.'); return; }
-              await new Promise(res=> gapi.load('client:auth2', res));
-              const scopes = SCOPES;
-              let auth = gapi.auth2.getAuthInstance();
-              if(!auth){ auth = await gapi.auth2.init({ client_id: CLIENT_ID, scope: scopes }); }
-              let user = null;
-              try {
-                user = await auth.signIn({ scope: scopes });
-              } catch (signinErr) {
-                console.warn('gapi.auth2.signIn failed', signinErr);
-                setStuErr('Google sign-in failed. Please try again or check pop-up blockers.');
-                return;
-              }
-              const profile = user.getBasicProfile && user.getBasicProfile();
-              const email = profile && profile.getEmail && profile.getEmail();
-              // Student redirect to standalone with token
-              const authResp = user && user.getAuthResponse && user.getAuthResponse();
-              const accessToken = authResp && authResp.access_token;
-              if(accessToken){
-                try{
-                  sessionStorage.setItem('isUserMode','true');
-                  if(email) sessionStorage.setItem('userEmail', String(email));
-                  sessionStorage.setItem('userToken', String(accessToken));
-                }catch(_){ }
-                window.location.href = 'portfolio.html?user=1';
-                return;
-              }
-              setStuErr('Sign-in succeeded but no access token was obtained. Please try again.');
+              });
+              tokenClient.requestAccessToken({ prompt: 'consent' });
             }catch(err){
               console.warn('stuSignIn error', err);
               const msg = (err && (err.error || err.details || err.message)) ? String(err.error || err.details || err.message) : 'Sign-in failed or was cancelled.';
@@ -1000,55 +969,8 @@
       btn.addEventListener('click', (e)=>{ e.preventDefault(); doSave(); });
     })();
     
-    // Google Sign-In/Sign-Out Handlers
-    (function(){
-      const authBtn = document.getElementById('authorize_button');
-      const signOutBtn = document.getElementById('signout_button');
-      
-      if(authBtn) {
-        authBtn.addEventListener('click', async () => {
-          try {
-            if(typeof gapi === 'undefined') {
-              alert('Google API not loaded yet. Please wait a moment.');
-              return;
-            }
-            
-            await new Promise(resolve => gapi.load('client:auth2', resolve));
-            const scopes = 'https://www.googleapis.com/auth/drive.appdata profile email openid';
-            let authInstance = gapi.auth2.getAuthInstance();
-            
-            if(!authInstance) {
-              const CLIENT_ID = window.GOOGLE_CLIENT_ID || '230626308317-ts08shmn77745hq81ghu5q7e2s2i0gf9.apps.googleusercontent.com';
-              await gapi.auth2.init({ client_id: CLIENT_ID, scope: scopes });
-              authInstance = gapi.auth2.getAuthInstance();
-            }
-            
-            const user = await authInstance.signIn({ scope: scopes });
-            console.log('User signed in successfully');
-            
-          } catch(err) {
-            console.error('Sign in failed:', err);
-            alert('Sign in failed: ' + (err.error || err.message || err));
-          }
-        });
-      }
-      
-      if(signOutBtn) {
-        signOutBtn.addEventListener('click', () => {
-          try {
-            if(gapi && gapi.auth2) {
-              const authInstance = gapi.auth2.getAuthInstance();
-              if(authInstance) {
-                authInstance.signOut();
-                console.log('User signed out');
-              }
-            }
-          } catch(err) {
-            console.error('Sign out failed:', err);
-          }
-        });
-      }
-    })();
+    // Google Sign-In/Sign-Out Handlers (index embeds portfolio UI sometimes; let portfolio.js own the buttons)
+    (function(){ /* intentionally empty: portfolio.html/portfolio.js handle GIS buttons */ })();
 
     // Load default portfolio data and render UI
     async function loadDefaultData() {

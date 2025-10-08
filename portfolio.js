@@ -3426,30 +3426,17 @@ PortfolioApp.prototype.initGoogleDriveClient = function() {
   // If already initialized, skip
   try { if (gapi.client && gapi.client.init && gapi.client._initialized) return; } catch (e) {}
 
-  // Try to init client; note: this won't sign the user in automatically.
+  // Try to init gapi.client only; tokens come from GIS and are set via gapi.client.setToken
   try {
-    gapi.load('client:auth2', async () => {
+    gapi.load('client', async () => {
       try {
         const initObj = { discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] };
         if (API_KEY) initObj.apiKey = API_KEY;
         if (CLIENT_ID) initObj.clientId = CLIENT_ID;
         await gapi.client.init(initObj);
-        // Also initialize auth2 if available and we have a client id
-        if (CLIENT_ID && gapi.auth2 && !gapi.auth2.getAuthInstance()) {
-          try { 
-            await gapi.auth2.init({ client_id: CLIENT_ID, scope: SCOPES });
-            // Add auth state change listener for button visibility
-            const authInstance = gapi.auth2.getAuthInstance();
-            if(authInstance && typeof window.updateAuthState === 'function') {
-              authInstance.isSignedIn.listen(window.updateAuthState);
-              // Initial state
-              window.updateAuthState(authInstance.isSignedIn.get());
-            }
-          } catch (e) { /* ignore */ }
-        }
         // mark initialized so we don't re-init
         gapi.client._initialized = true;
-        console.debug('gapi.client initialized for Drive (no sign-in performed)');
+        console.debug('gapi.client initialized for Drive (GIS provides tokens)');
       } catch (err) {
         console.warn('gapi.client.init failed', err);
       }
@@ -3464,22 +3451,4 @@ PortfolioApp.prototype.initGoogleDriveClient = function() {
 // checks current gapi auth user email and updates localStorage.vcMode.
 // Safe no-op if gapi/auth not available.
 // ---------------------------------------------------------------------------
-window.refreshVcModeStatus = function(){
-  try {
-    if(typeof gapi === 'undefined' || !gapi.auth2 || !gapi.auth2.getAuthInstance) return;
-    const inst = gapi.auth2.getAuthInstance();
-    if(!inst) return;
-    const user = inst.currentUser && inst.currentUser.get ? inst.currentUser.get() : null;
-    if(!user) return;
-    const profile = user.getBasicProfile && user.getBasicProfile();
-    const email = profile && profile.getEmail && profile.getEmail();
-    if(!email) return;
-    if(email.toLowerCase() === 'rmuportfolioa@gmail.com'){
-      if(localStorage.getItem('vcMode') !== '1') console.log('[vc-mode] Activated via refresh helper for', email);
-      localStorage.setItem('vcMode','1');
-    } else {
-      if(localStorage.getItem('vcMode') === '1') console.log('[vc-mode] Deactivated via refresh helper for', email);
-      localStorage.removeItem('vcMode');
-    }
-  } catch(e){ console.warn('refreshVcModeStatus failed', e); }
-};
+window.refreshVcModeStatus = function(){ /* deprecated: gapi.auth2 removed; no-op */ };

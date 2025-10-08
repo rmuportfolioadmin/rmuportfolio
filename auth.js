@@ -15,20 +15,7 @@
   }
 
   async function getIdToken(){
-    // Use gapi.auth2 if already used in your flow; otherwise fallback to GIS token client for ID token
-    if (typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance) {
-      const inst = gapi.auth2.getAuthInstance();
-      if (inst) {
-        const user = inst.currentUser && inst.currentUser.get ? inst.currentUser.get() : null;
-        if (user) {
-          const authResp = user.getAuthResponse && user.getAuthResponse();
-          if (authResp && (authResp.id_token || authResp.idToken)) {
-            return authResp.id_token || authResp.idToken;
-          }
-        }
-      }
-    }
-    // Fallback: use Google Identity Services One Tap to get a new ID token silently if possible
+    // GIS One Tap / popup to retrieve ID token
     await _ensureGisReady();
     return new Promise((resolve, reject)=>{
       try {
@@ -41,22 +28,25 @@
     });
   }
 
-  function getCurrentUserEmail(){
+  function getCurrentUserEmail(){ return ''; }
+
+  function isAdmin(){ return false; }
+
+  async function signOut(){
     try {
-      if (typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance) {
-        const inst = gapi.auth2.getAuthInstance();
-        const user = inst && inst.currentUser && inst.currentUser.get ? inst.currentUser.get() : null;
-        const profile = user && user.getBasicProfile && user.getBasicProfile();
-        const email = profile && profile.getEmail && profile.getEmail();
-        return (email||'').toLowerCase();
+      // Best-effort revoke of access token if one exists
+      if (window.gapi && gapi.client && typeof gapi.client.getToken === 'function'){
+        const t = gapi.client.getToken();
+        if (t && t.access_token){
+          await fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(t.access_token), { method:'POST', headers:{'Content-type':'application/x-www-form-urlencoded'} });
+        }
+        gapi.client.setToken({});
+      }
+      if (window.google && google.accounts && google.accounts.id){
+        try { google.accounts.id.disableAutoSelect(); } catch(_) {}
       }
     } catch(_) {}
-    return '';
   }
 
-  function isAdmin(){
-    return getCurrentUserEmail() === VC_EMAIL;
-  }
-
-  window.RMU_AUTH = { getIdToken, isAdmin, getCurrentUserEmail, CLIENT_ID, VC_EMAIL };
+  window.RMU_AUTH = { getIdToken, isAdmin, getCurrentUserEmail, signOut, CLIENT_ID, VC_EMAIL };
 })();
