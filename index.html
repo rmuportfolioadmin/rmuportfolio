@@ -6,36 +6,29 @@
   <title>Portfolio Gallery</title>
   <meta name="description" content="Gallery of medical student portfolios" />
     <meta name="referrer" content="no-referrer" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com https://accounts.google.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://apis.google.com https://accounts.google.com https://*.run.app; frame-src https://accounts.google.com; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com https://accounts.google.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://apis.google.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://*.run.app; frame-src https://accounts.google.com; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
   <link id="css-gallery" rel="stylesheet" href="gallery.css?v=20250928.1" />
   <link id="css-portfolio" rel="stylesheet" href="portfolio.css?v=20250930.1" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}</style>
   <script>
-    // Pre-disable the irrelevant stylesheet as early as possible to avoid flash/mixed styles
+    // Ensure the index page defaults to gallery styles to avoid mixed flash; portfolio styles are enabled only when needed in VC inline view
     (function(){
       try{
-        var isVc = (function(){ try{return localStorage.getItem('vcMode')==='1';}catch(_){return false;}})();
         var cssGallery = document.getElementById('css-gallery');
         var cssPortfolio = document.getElementById('css-portfolio');
-        if(isVc){
-          if(cssGallery) cssGallery.disabled = false;
-          if(cssPortfolio) cssPortfolio.disabled = true;
-        } else {
-          if(cssGallery) cssGallery.disabled = true;
-          if(cssPortfolio) cssPortfolio.disabled = false;
-        }
+        if(cssGallery) cssGallery.disabled = false;
+        if(cssPortfolio) cssPortfolio.disabled = true;
       }catch(_){/* ignore */}
     })();
   </script>
   <script>
-    // Load the correct JS early so DOMContentLoaded handlers inside those files run as expected
+    // On index, always load gallery logic early; students will be redirected to portfolio.html when needed
     (function(){
       try{
-        var isVc = (function(){ try{return localStorage.getItem('vcMode')==='1';}catch(_){return false;}})();
         var s = document.createElement('script');
         s.defer = true;
-        s.src = isVc ? 'gallery.js?v=20250928.1' : 'portfolio.js?v=20250925.3';
+        s.src = 'gallery.js?v=20250928.1';
         document.head.appendChild(s);
       }catch(_){/* ignore */}
     })();
@@ -260,16 +253,7 @@
         }
       } else {
         window.__VC_MODE = false;
-        // Student-first mode on index.html: show embedded portfolio UI, hide gallery by default
-        try { document.body.classList.add('student-mode'); } catch(_){}
-        const root = document.getElementById('portfolio-root'); if(root) root.style.display='block';
-        const allowParam = location.search.includes('allowGallery=1');
-        if(allowParam){
-          // Developer override to view gallery on index.html if files.json exists
-          console.log('[gallery] allowGallery=1 set — showing gallery alongside.');
-          try { document.body.classList.remove('student-mode'); } catch(_){}
-        }
-        // Welcome modal and default data loading for student mode
+        // Index is gallery-only for students/visitors; sign-in or continue will redirect to portfolio.html
         (function(){
           function showWelcome(on){ const el=document.getElementById('welcome-overlay'); if(el) el.style.display = on?'flex':'none'; }
           function showLoading(on){ const el=document.getElementById('welcome-loading'); if(el) el.style.display = on?'flex':'none'; }
@@ -349,14 +333,19 @@
                   return;
                 }
               }
-              // Initialize client if needed for Drive REST calls
-              if(!gapi.client || !gapi.client._initialized){
-                try{ await gapi.client.init({ discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] }); gapi.client._initialized = true; }catch(_){ }
+              // Student user: redirect to standalone portfolio with access token and email in sessionStorage
+              const authResp = user && user.getAuthResponse && user.getAuthResponse();
+              const accessToken = authResp && authResp.access_token;
+              if(accessToken && email){
+                try{
+                  sessionStorage.setItem('isUserMode','true');
+                  sessionStorage.setItem('userEmail', String(email));
+                  sessionStorage.setItem('userToken', String(accessToken));
+                }catch(_){ }
+                window.location.href = 'portfolio.html?user=1';
+                return;
               }
-              // After sign-in, auto-load from appDataFolder
-              try{ showWelcome(false); showStu(false); }catch(_){ }
-              try{ if(window.refreshVcModeStatus) window.refreshVcModeStatus(); }catch(_){ }
-              try{ if(window.app && typeof window.app.loadFromDrive==='function'){ await window.app.loadFromDrive(); } }catch(e){ console.warn('Student loadFromDrive failed', e); }
+              setStuErr('Sign-in succeeded but no access token was obtained. Please try again.');
             }catch(err){ setStuErr('Sign-in failed or was cancelled.'); console.warn('stuSignIn error', err); }
           }
           
@@ -367,37 +356,14 @@
             const stuSignin = document.getElementById('stu-signin');
             
             if(welcomeSignin) welcomeSignin.addEventListener('click', ()=>{
-              showWelcome(false);
-              // Remember that user has seen welcome
-              try{ localStorage.setItem('rmu_welcome_seen', '1'); }catch(_){}
-              showStu(true);
+              // Single sign-in: open Google prompt directly
+              try{ localStorage.setItem('rmu_welcome_seen', '1'); }catch(_){ }
+              stuSignIn();
             });
             
-            if(welcomeContinue) welcomeContinue.addEventListener('click', async ()=>{
-              // Hide welcome modal
-              showWelcome(false);
-              
-              // Switch to student mode (activates portfolio.css rules)
-              setUIMode('student-mode');
-              document.body.classList.add('portfolio-loaded');
-              document.body.classList.remove('portfolio-blurred');
-              
-              // Show portfolio root
-              const portfolioRoot = document.getElementById('portfolio-root');
-              if (portfolioRoot) {
-                portfolioRoot.style.display = 'block';
-                portfolioRoot.style.visibility = 'visible';
-                portfolioRoot.style.opacity = '1';
-              }
-              
-              // Hide gallery-only DOM
-              // Only hide gallery grid and aux elements, keep main-content visible as it wraps portfolio-root
-              const hideIds = ['gallery-grid','status-bar','scan-progress'];
-              hideIds.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-              document.querySelectorAll('.gal-header, .gal-footer').forEach(el => el.style.display = 'none');
-              
-              // Load and render portfolio data
-              await loadDefaultData();
+            if(welcomeContinue) welcomeContinue.addEventListener('click', ()=>{
+              // Redirect to standalone portfolio with default JSON
+              window.location.href = 'portfolio.html?file=portfolio-data.json';
             });
             // Remember that user has seen welcome when continuing or signing in
             // This is set in the individual handlers; no extra closure needed here.
@@ -841,10 +807,10 @@
         // Load only gallery JS for VC
         ensureGalleryScriptLoaded();
       } else {
-        setUIMode('student-mode'); // Student mode by default
-        // Load only portfolio JS for students
-        ensurePortfolioScriptLoaded();
-        // Welcome overlay is handled by the student-mode bootstrap above to respect "seen" state
+        setUIMode('vc-gallery-mode'); // Gallery-only on index for students/visitors
+        // Load only gallery JS for index
+        ensureGalleryScriptLoaded();
+        // Welcome overlay is handled by the bootstrap above
       }
     })();
 
