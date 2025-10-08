@@ -33,6 +33,43 @@
       }catch(_){/* ignore */}
     })();
   </script>
+  <script>
+    // Lightweight dynamic script loader used by UI mode bootstrap
+    (function(){
+      const SCRIPT_VERSIONS = { gallery: '20250928.1', portfolio: '20250925.3' };
+      let __galleryLoaded = false, __portfolioLoaded = false;
+      let __galleryLoading = null, __portfolioLoading = null;
+      function loadScriptOnce(src){
+        return new Promise((resolve, reject)=>{
+          try{
+            const s = document.createElement('script');
+            s.src = src; s.async = true; s.onload = ()=>resolve(); s.onerror = (e)=>reject(e);
+            document.head.appendChild(s);
+          }catch(e){ reject(e); }
+        });
+      }
+      window.ensureGalleryScriptLoaded = function(){
+        try{
+          if(__galleryLoaded) return Promise.resolve();
+          if(__galleryLoading) return __galleryLoading;
+          const existing = Array.from(document.getElementsByTagName('script')).some(s=> (s.src||'').includes('gallery.js'));
+          if(existing){ __galleryLoaded = true; return Promise.resolve(); }
+          __galleryLoading = loadScriptOnce('gallery.js?v='+SCRIPT_VERSIONS.gallery).then(()=>{ __galleryLoaded = true; });
+          return __galleryLoading;
+        }catch(_){ return Promise.resolve(); }
+      };
+      window.ensurePortfolioScriptLoaded = function(){
+        try{
+          if(__portfolioLoaded || window.app) { __portfolioLoaded = true; return Promise.resolve(); }
+          if(__portfolioLoading) return __portfolioLoading;
+          const existing = Array.from(document.getElementsByTagName('script')).some(s=> (s.src||'').includes('portfolio.js'));
+          if(existing){ __portfolioLoaded = true; return Promise.resolve(); }
+          __portfolioLoading = loadScriptOnce('portfolio.js?v='+SCRIPT_VERSIONS.portfolio).then(()=>{ __portfolioLoaded = true; });
+          return __portfolioLoading;
+        }catch(_){ return Promise.resolve(); }
+      };
+    })();
+  </script>
   <script src="config.js" defer></script>
   <script src="auth.js" defer></script>
 </head>
