@@ -3,17 +3,13 @@
 // Falls back gracefully if files.json missing.
 
 (function(){
-  // Bind DOM elements after DOMContentLoaded to avoid nulls when script loads early
-  let grid, statusBar, searchBox, countEl, scanToggle, scanProgress, scanBar;
-  function bindDom(){
-    grid = document.getElementById('gallery-grid');
-    statusBar = document.getElementById('status-bar');
-    searchBox = document.getElementById('search-box');
-    countEl = document.getElementById('count');
-    scanToggle = document.getElementById('scan-toggle');
-    scanProgress = document.getElementById('scan-progress');
-    scanBar = document.getElementById('scan-progress-bar');
-  }
+  const grid = document.getElementById('gallery-grid');
+  const statusBar = document.getElementById('status-bar');
+  const searchBox = document.getElementById('search-box');
+  const countEl = document.getElementById('count');
+  const scanToggle = document.getElementById('scan-toggle');
+  const scanProgress = document.getElementById('scan-progress');
+  const scanBar = document.getElementById('scan-progress-bar');
   let metaList = []; // full list
   let filtered = [];
 
@@ -52,10 +48,6 @@
   function setStatus(msg){ if(statusBar) statusBar.textContent = msg; }
 
   function render(){
-    if(!grid){
-      console.warn('[gallery] grid element not found; aborting render');
-      return;
-    }
     grid.classList.add('list-mode');
     grid.innerHTML = '';
     
@@ -80,21 +72,12 @@
       const frag = document.createDocumentFragment();
       const endIndex = Math.min(startIndex + BATCH_SIZE, totalItems);
       
-      let renderedCount = 0;
       for(let i = startIndex; i < endIndex; i++) {
-        const m = filtered[i] || {};
-        // Determine link target; skip entries with no usable reference
-        const inVc = !!(window.__VC_MODE && window.__REMOTE_PORTFOLIO_BASE);
-        const fileRef = inVc ? (m.id || m.file || '') : (m.file || '');
-        if(!fileRef){ continue; }
+        const m = filtered[i];
         const a = document.createElement('a');
         // Add timestamp to force fresh loading and prevent cache
         const timestamp = Date.now();
-        if(inVc){
-          a.href = `portfolio.html?driveFile=${encodeURIComponent(fileRef)}&t=${timestamp}`;
-        } else {
-          a.href = `portfolio.html?file=${encodeURIComponent(fileRef)}&t=${timestamp}`;
-        }
+        a.href = `portfolio.html?file=${encodeURIComponent(m.file)}&t=${timestamp}`;
         a.className = 'gal-row';
         a.setAttribute('role','listitem');
         a.setAttribute('data-name', (m.name||'').toLowerCase());
@@ -104,7 +87,7 @@
         left.className = 'row-left';
         const fileEl = document.createElement('div');
         fileEl.className = 'row-file';
-        fileEl.textContent = (m.file ? String(m.file).replace(/^data\//,'') : String(fileRef));
+        fileEl.textContent = m.file.replace(/^data\//,'');  // Show filename only
         const nameEl = document.createElement('div');
         nameEl.className = 'row-name';
         nameEl.textContent = m.name || 'untitled';  // Show filename as name
@@ -126,7 +109,6 @@
           if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); a.click(); }
         });
         frag.appendChild(a);
-        renderedCount++;
       }
       
       grid.appendChild(frag);
@@ -141,8 +123,8 @@
       }
     }
     
-  // Start rendering
-  renderBatch(0);
+    // Start rendering
+    renderBatch(0);
     
     // Immediate count update for small datasets
     if(totalItems <= 200 && countEl) {
@@ -152,6 +134,12 @@
 
   let searchTimeout;
   function applyFilter(){
+    // In admin mode, gallery search should not interfere with admin list filtering
+    try {
+      if (window.__DISABLE_GALLERY_SEARCH || document.body.classList.contains('admin-mode')) {
+        return;
+      }
+    } catch(_) {}
     // Clear previous timeout to debounce rapid typing
     clearTimeout(searchTimeout);
     
@@ -164,59 +152,20 @@
         return; 
       }
       
-      // Search across prepared terms: name + filename (+ roll/email if present)
+      // Search across combined terms (name + filename)
       filtered = metaList.filter(m => {
         const terms = m._terms || (m._name || '') + ' ' + (m.file || '');
         return terms.includes(q);
       });
       
       render();
-      // If nothing rendered due to missing file refs, show helper message
-      if((grid && !grid.children.length) && metaList.length){
-        const info = document.createElement('div');
-        info.className = 'gal-empty';
-        info.innerHTML = '<strong>Portfolios could not be listed</strong><span>files.json entries are missing "file" or "id" fields.</span>';
-        grid.appendChild(info);
-      }
     }, metaList.length > 100 ? 300 : 150); // Longer debounce for large datasets
   }
 
   async function loadIndex(){
+    // Skip index loading when admin mode is active
+    try { if (document.body.classList.contains('admin-mode')) return; } catch(_) {}
     setStatus('Loading portfolio index...');
-    // VC remote manifest mode: if VC flag active attempt remote manifest fetch first
-    if(window.__VC_MODE && window.__REMOTE_MANIFEST_URL){
-      try {
-        const remoteUrl = window.__REMOTE_MANIFEST_URL + (window.__REMOTE_MANIFEST_URL.includes('?')?'&':'?') + 'cb=' + Date.now();
-        const r = await fetch(remoteUrl, { cache:'no-store' });
-        if(!r.ok) throw new Error('HTTP '+r.status);
-        const arr = await r.json();
-        if(!Array.isArray(arr)) throw new Error('Remote manifest malformed');
-        // Expect items like { id, file, roll, email, updatedAt }
-        metaList = arr.map(m => ({
-          id: m.id || null,
-          file: m.file || m.roll || 'unknown.json',
-          name: (m.name || m.roll || m.file || 'untitled').toString(),
-          roll: m.roll || '',
-          email: m.email || ''
-        }));
-        metaList.forEach(m => {
-          const name = (m.name||'').toLowerCase();
-          const file = (m.file||'').toLowerCase();
-          const roll = (m.roll||'').toLowerCase();
-          const email = (m.email||'').toLowerCase();
-          m._name = name;
-          m._terms = `${name} ${file} ${roll} ${email}`.trim();
-        });
-        filtered = metaList.slice();
-        render();
-        setStatus(metaList.length ? '' : 'No remote portfolios');
-        return; // Skip local path entirely in VC mode
-      } catch(e){
-        console.error('[vc-mode] Remote manifest load failed', e);
-        setStatus('Remote manifest failed.');
-        return; // Do not fall back to local enumeration (privacy)
-      }
-    }
     
     // Clear any previous portfolio data from memory/cache
     if(typeof localStorage !== 'undefined') {
@@ -244,7 +193,7 @@
       const arr = await resp.json();
       if(!Array.isArray(arr)) throw new Error('files.json malformed');
       
-      // Process the loaded data - use filename only for template-based portfolios
+      // Process the loaded data
       metaList = arr.map(m => ({
         file: m.file,
         name: m.name || m.file || 'untitled'
@@ -400,26 +349,19 @@
 
   // firstImage removed (no longer needed)
 
-  function init(){
-    bindDom();
-    // Attach listeners now that DOM is ready
-    if(searchBox){ searchBox.addEventListener('input', applyFilter); }
-    if(scanToggle){
-      scanToggle.addEventListener('change', ()=>{
-        if(!scanToggle.checked){
-          enumAborted = true;
-          showProgress(false);
-          setStatus('Auto scan disabled.');
-        } else {
-          enumAborted = false;
-          if(!metaList.length){ scheduleEnumerationFallback(); }
-        }
-      });
-    }
-    loadIndex();
+  if(searchBox){ searchBox.addEventListener('input', applyFilter); }
+  if(scanToggle){
+    scanToggle.addEventListener('change', ()=>{
+      if(!scanToggle.checked){
+        enumAborted = true;
+        showProgress(false);
+        setStatus('Auto scan disabled.');
+      } else {
+        enumAborted = false;
+        if(!metaList.length){ scheduleEnumerationFallback(); }
+      }
+    });
   }
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init);
-  } else { init(); }
+  loadIndex();
   // Note: Chrome "Intervention" message about lazy images is informational only; we intentionally use native lazy-loading.
 })();
