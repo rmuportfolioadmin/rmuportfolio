@@ -61,129 +61,84 @@
   <div id="vc-overlay" class="vc-overlay" role="dialog" aria-modal="true" aria-labelledby="vc-title">
     <div class="vc-modal">
       <div class="vc-title" id="vc-title">Administrator access</div>
-      <div id="vc-error" class="vc-error"></div>
-  <div class="vc-desc">Sign in with the authorized Google account to open the secure gallery. Only <strong>rmuportfolioa@gmail.com</strong> is allowed.</div>
-      <div class="vc-actions">
-        <button id="vc-signin" class="btn btn-primary">Sign in with Google</button>
-      </div>
-    </div>
-  </div>
-  <!-- Admin Loading Overlay (shown while opening remote portfolio) -->
-  <div id="admin-loading-overlay" aria-live="polite" aria-busy="true" role="status">
-    <div class="admin-loading-card">
-      <div class="admin-loading-spinner" aria-hidden="true"></div>
-      <div class="admin-loading-text">Opening portfolio…</div>
-    </div>
-  </div>
-  <!-- Welcome Modal Overlay (initial load) -->
-  <style>
-    .welcome-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:saturate(1.2) blur(8px);display:flex;align-items:center;justify-content:center;z-index:10001}
-    .welcome-modal{width:min(560px,92vw);background:#fff;border-radius:20px;border:2px solid #d4b071;box-shadow:0 32px 80px -16px rgba(110,28,23,.45);padding:32px;text-align:center}
-    .welcome-header{margin-bottom:24px}
-    .welcome-logo{width:80px;height:80px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#6e1c17,#55120f);display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.3)}
-    .welcome-title{font:700 24px Inter,system-ui,sans-serif;color:#6e1c17;margin:0 0 8px;letter-spacing:-0.5px}
-    .welcome-subtitle{font:500 16px Inter,system-ui,sans-serif;color:#8b4513;margin:0 0 20px}
-    .welcome-desc{font:14px/1.6 Inter,system-ui,sans-serif;color:#5d4037;margin-bottom:28px;max-width:460px;margin-left:auto;margin-right:auto}
-    .welcome-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-    .welcome-btn{appearance:none;border:0;border-radius:12px;padding:12px 20px;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;transition:all 0.3s ease;min-width:140px;position:relative;overflow:hidden}
-    .welcome-btn::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);transition:left 0.5s ease;z-index:1}
-    .welcome-btn:hover::before{left:100%}
-    .welcome-btn-primary{background:linear-gradient(135deg,#6e1c17 0%,#55120f 100%);color:#fff;box-shadow:0 8px 24px -8px rgba(110,28,23,.4);border:2px solid #55120f}
-    .welcome-btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 32px -8px rgba(110,28,23,.5)}
-    .welcome-btn-ghost{background:rgba(110,28,23,.08);color:#6e1c17;border:2px solid #d4b071}
-    .welcome-btn-ghost:hover{background:rgba(110,28,23,.15);transform:translateY(-1px)}
-    .welcome-btn-icon{margin-right:8px;font-size:16px}
-    .loading-dots{display:none;align-items:center;justify-content:center;margin-top:16px;font:14px Inter,system-ui,sans-serif;color:#8b4513}
-    .loading-dots::after{content:'';margin-left:4px;animation:loadingDots 1.4s ease-in-out infinite both}
-    @keyframes loadingDots{0%,80%,100%{opacity:0}40%{opacity:1}}
-    body.portfolio-blurred #portfolio-root{filter:blur(8px) brightness(0.7);pointer-events:none;transition:all 0.4s ease}
-    body.portfolio-loaded #portfolio-root{filter:none;pointer-events:auto;transition:all 0.4s ease}
-  </style>
-  <div id="welcome-overlay" class="welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-    <div class="welcome-modal">
-      <div class="welcome-header">
-        <div class="welcome-logo"><img src="RMUlogo.png" alt="RMU Logo" style="width:60px;height:60px;object-fit:contain;"/></div>
-        <h1 class="welcome-title" id="welcome-title">Welcome to RMU Portfolio</h1>
-        <p class="welcome-subtitle">Rawalpindi Medical University</p>
-      </div>
-      <p class="welcome-desc">
-        Your digital academic portfolio is ready to use. Sign in with Google to sync your data across devices, 
-        or continue without signing in to explore the features with sample data.
-      </p>
-      <div class="welcome-actions">
-        <button id="welcome-signin" class="welcome-btn welcome-btn-primary">
-          <span class="welcome-btn-icon">🔑</span>Sign in with Google
-        </button>
-        <button id="welcome-continue" class="welcome-btn welcome-btn-ghost">
-          <span class="welcome-btn-icon">📝</span>Continue without sign in
-        </button>
-      </div>
-      <div id="welcome-loading" class="loading-dots">Loading portfolio data</div>
-    </div>
-  </div>
-  
-  <!-- Student Sign-In Modal Overlay (non-VC) -->
-  <style>
-    .stu-overlay{position:fixed;inset:0;background:rgba(10,20,40,.55);backdrop-filter:saturate(1.1) blur(3px);display:none;align-items:center;justify-content:center;z-index:10000}
-    .stu-modal{width:min(520px,92vw);background:#fff;border-radius:16px;border:1px solid #d8e0ea;box-shadow:0 24px 64px -16px rgba(16,40,80,.35);padding:22px}
-    .stu-title{font:600 18px Inter,system-ui,sans-serif;color:#0b2340;margin:4px 0 12px}
-    .stu-desc{font:13px/1.45 Inter,system-ui,sans-serif;color:#3a4b61;margin-bottom:16px}
-  </style>
-  <div id="stu-overlay" class="stu-overlay" role="dialog" aria-modal="true" aria-labelledby="stu-title">
-    <div class="stu-modal">
-      <div class="stu-title" id="stu-title">Sign in to load your private portfolio</div>
-      <div id="stu-error" class="vc-error" style="display:none"></div>
-      <div class="stu-desc">Use your Google account. Your portfolio JSON is kept in your private Google Drive appData folder. Nothing is shared publicly. This is not the admin login.</div>
-      <div class="vc-actions">
-        <button id="stu-signin" class="btn btn-primary">Sign in with Google</button>
-      </div>
-    </div>
-  </div>
-  <script src="https://apis.google.com/js/api.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script>
-    // Lightweight dynamic script loader to segregate JS per mode
-    const SCRIPT_VERSIONS = { gallery: '20250928.1', portfolio: '20250925.3' };
-    let __galleryLoaded = false, __portfolioLoaded = false;
-    let __galleryLoading = null, __portfolioLoading = null;
-    function loadScriptOnce(src){
-      return new Promise((resolve, reject)=>{
-        try{
-          const s = document.createElement('script');
-          s.src = src; s.async = true; s.onload = ()=>resolve(); s.onerror = (e)=>reject(e);
-          document.head.appendChild(s);
-        }catch(e){ reject(e); }
-      });
-    }
-    async function ensureGalleryScriptLoaded(){
-      if(__galleryLoaded) return; if(__galleryLoading) return __galleryLoading;
-      // If a gallery.js script tag already exists (from early injection), don't add another
-      const existing = Array.from(document.getElementsByTagName('script')).some(s=> (s.src||'').includes('gallery.js'));
-      if(existing){
-        __galleryLoaded = true;
-        __galleryLoading = Promise.resolve();
-        return __galleryLoading;
-      }
-      __galleryLoading = loadScriptOnce('gallery.js?v='+SCRIPT_VERSIONS.gallery).then(()=>{ __galleryLoaded = true; });
-      return __galleryLoading;
-    }
-    async function ensurePortfolioScriptLoaded(){
-      if(__portfolioLoaded || window.app) { __portfolioLoaded = true; return; }
-      if(__portfolioLoading) return __portfolioLoading;
-      // If a portfolio.js script tag already exists (from early injection), wait for app readiness
-      const existing = Array.from(document.getElementsByTagName('script')).some(s=> (s.src||'').includes('portfolio.js'));
-      if(existing){
-        __portfolioLoading = new Promise((resolve)=>{
-          const check = ()=>{ if(window.app){ __portfolioLoaded = true; resolve(); } else { setTimeout(check, 50); } };
-          check();
-        });
-        return __portfolioLoading;
-      }
-      __portfolioLoading = loadScriptOnce('portfolio.js?v='+SCRIPT_VERSIONS.portfolio).then(()=>{ __portfolioLoaded = true; });
-      return __portfolioLoading;
-    }
+      <!-- JS libs for PDF export (always safe to load) -->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+      <script>
+        // Intercept gallery clicks in VC mode to open portfolio in a new tab and pass data via postMessage (forUI behavior)
+        document.addEventListener('click', function(e){
+          const a = e.target.closest && e.target.closest('a.gal-row');
+          if(!a) return;
+          if(!(window.__VC_MODE)) return; // only intercept for VC/admin
+          e.preventDefault(); e.stopImmediatePropagation();
+          const href = a.getAttribute('href') || '';
+          const u = new URL(href, location.href);
+          const driveRef = u.searchParams.get('driveFile') || u.searchParams.get('file');
+          if(!driveRef){ console.warn('No drive reference in link'); return; }
+          openPortfolioInNewTabWithData(driveRef);
+        }, true);
 
-    // OAuth Client ID loaded from config.js
+        async function openPortfolioInNewTabWithData(driveRef){
+          try{
+            const cfg = (window.RMU_CONFIG||{});
+            const base = (cfg.BACKEND_BASE||'').replace(/\/$/, '');
+            if(!base){ alert('Backend not configured'); return; }
+            let idTok = null; try { idTok = sessionStorage.getItem('vcIdToken'); } catch(_){ }
+            if(!idTok){
+              // Show sign-in overlay if token missing
+              const ov = document.getElementById('vc-overlay'); if(ov) ov.style.display='flex';
+              return;
+            }
+            // Show admin loading overlay
+            document.body.classList.add('admin-loading');
+            const r = await fetch(`${base}/api/download?id=${encodeURIComponent(driveRef)}`, {
+              headers: { 'Authorization': 'Bearer '+idTok, 'Content-Type':'application/json' },
+              credentials: 'omit', cache: 'no-store'
+            });
+            if(!r.ok){ throw new Error('HTTP '+r.status); }
+            const data = await r.json();
+            const url = `portfolio.html?admin=1&remote=1`;
+            const win = window.open(url, '_blank');
+            if(!win){ throw new Error('Popup blocked'); }
+            // Robust delivery with retries until child acknowledges
+            let attempts = 0, active = true;
+            const send = () => {
+              if(!active) return;
+              try{
+                win.postMessage({ type: 'admin-portfolio-data', data, filename: driveRef, source: 'remote' }, '*');
+                attempts++;
+              }catch(e){}
+              if(attempts > 30){ active = false; }
+            };
+            const ack = (ev)=>{
+              if(ev.source === win && ev.data && ev.data.type === 'admin-data-received'){
+                active = false; window.removeEventListener('message', ack);
+                document.body.classList.remove('admin-loading');
+              }
+            };
+            window.addEventListener('message', ack);
+            // schedule attempts
+            setTimeout(send, 60);
+            const interval = setInterval(()=>{ if(!active){ clearInterval(interval); return; } send(); }, 500);
+            // safety clear
+            setTimeout(()=>{ active=false; clearInterval(interval); document.body.classList.remove('admin-loading'); }, 20000);
+          }catch(err){
+            console.error('openPortfolioInNewTabWithData failed', err);
+            document.body.classList.remove('admin-loading');
+            alert('Failed to open portfolio: ' + (err.message||err));
+          }
+        }
+
+        // Mode management and UI state control (gallery-only on index)
+        function setUIMode(mode) {
+          document.body.classList.remove('vc-gallery-mode', 'vc-portfolio-mode', 'student-mode');
+          document.body.classList.add(mode);
+          const cssGallery = document.getElementById('css-gallery');
+          const cssPortfolio = document.getElementById('css-portfolio');
+          if (mode === 'vc-gallery-mode') { if(cssGallery) cssGallery.disabled=false; if(cssPortfolio) cssPortfolio.disabled=true; }
+          if (mode === 'student-mode') { if(cssGallery) cssGallery.disabled=true; if(cssPortfolio) cssPortfolio.disabled=false; }
+          if (mode === 'vc-portfolio-mode') { if(cssGallery) cssGallery.disabled=false; if(cssPortfolio) cssPortfolio.disabled=false; }
+        }
     const VC_EMAIL = 'rmuportfolioa@gmail.com';
     function showVcOverlay(on){ const el = document.getElementById('vc-overlay'); if(el){ el.style.display = on?'flex':'none'; } }
     function setVcError(msg){ const e=document.getElementById('vc-error'); if(e){ e.textContent=msg||''; e.style.display = msg?'block':'none'; } }

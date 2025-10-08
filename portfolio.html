@@ -6,7 +6,7 @@
     <title>Portfolio Manager, RMU</title>
     <meta name="description" content="Professional medical portfolio of Abdul Haseeb Ahmad, MBBS student specializing in internal medicine and cardiology.">
     <meta name="referrer" content="no-referrer" />
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com https://accounts.google.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://apis.google.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com; frame-src https://accounts.google.com; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com https://accounts.google.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://apis.google.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://*.run.app; frame-src https://accounts.google.com; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
         <!-- Cache hard disable (defensive; dynamic query params already used) -->
         <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
         <meta http-equiv="Pragma" content="no-cache" />
@@ -24,6 +24,7 @@
         <script>
     console.log("Google API script tag loaded!");
 </script>
+        <script src="config.js"></script>
         <script>
         // Early UX polish: if redirected from index with a session token, hide the authorize button instantly to prevent flicker.
         (function(){
@@ -43,6 +44,28 @@
     <a href="index.html" onclick="try{localStorage.clear();sessionStorage.clear();}catch(e){}if(history.length>1){history.back();return false;}" style="position:fixed;left:10px;top:10px;z-index:10000;background:linear-gradient(90deg,#0a66c2,#2b79ff);color:#fff;padding:8px 14px;border-radius:24px;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 4px 12px -2px rgba(10,70,150,.35);display:inline-flex;align-items:center;gap:6px;">
         <span style="display:inline-block;transform:translateY(1px);">&#8592;</span> Gallery
     </a>
+    <script>
+    // Admin postMessage handler: accept portfolio data from index admin opener and acknowledge
+    (function(){
+        function handleAdminMessage(event){
+            try{
+                const d = event && event.data;
+                if(!d || d.type !== 'admin-portfolio-data') return;
+                // acknowledge receipt to parent window
+                try{ if(event.source && event.source !== window){ event.source.postMessage({ type:'admin-data-received', success:true }, '*'); } }catch(_){}
+                // adopt data into the app using the same preloaded flow
+                try{
+                    window.__PRELOADED_PORTFOLIO_DATA = d.data;
+                    window.__ADOPTED_SPECIFIC_PORTFOLIO = true;
+                    try{ localStorage.setItem('__lastPortfolioFile','admin-remote'); }catch(_){}
+                    window.dispatchEvent(new CustomEvent('portfolio_data_ready'));
+                    const pre = document.getElementById('preload-status'); if(pre){ pre.textContent='Admin data received'; }
+                }catch(err){ console.warn('[admin-message] Failed to adopt admin data', err); }
+            }catch(_){/* ignore */}
+        }
+        window.addEventListener('message', handleAdminMessage);
+    })();
+    </script>
     <script>
     // Query param portfolio JSON loader shim (enhanced for reliability & VC remote mode).
     // Supports:
@@ -99,8 +122,16 @@
                 fileUrl = window.__REMOTE_PORTFOLIO_BASE + encodeURIComponent(driveFile) + '&cb=' + cacheBuster;
                 remoteMode = true;
             } else {
-                console.warn('[portfolio-loader] driveFile provided but __REMOTE_PORTFOLIO_BASE missing');
-                fileUrl = driveFile + (driveFile.includes('?')?'&':'?') + 'cb=' + cacheBuster; // attempt direct (likely 404)
+                // Fall back to configured BACKEND_BASE if available
+                const cfg = (window.RMU_CONFIG||{});
+                const base = (cfg.BACKEND_BASE||'').replace(/\/$/, '');
+                if(base){
+                    fileUrl = base + '/api/download?id=' + encodeURIComponent(driveFile) + '&cb=' + cacheBuster;
+                    remoteMode = true;
+                } else {
+                    console.warn('[portfolio-loader] driveFile provided but no remote base configured');
+                    fileUrl = driveFile + (driveFile.includes('?')?'&':'?') + 'cb=' + cacheBuster; // last-resort attempt
+                }
             }
         } else {
             fileUrl = file.includes('?') ? `${file}&cb=${cacheBuster}` : `${file}?cb=${cacheBuster}`;
@@ -137,7 +168,13 @@
                     const delay = 300 * attempt;
                     pre.textContent = `Retrying (${attempt})...`;
                     if(driveFile){
-                        const retryUrl = window.__REMOTE_PORTFOLIO_BASE ? (window.__REMOTE_PORTFOLIO_BASE + encodeURIComponent(driveFile) + '&cb=' + Date.now()) : (driveFile + (driveFile.includes('?')?'&':'?') + 'cb=' + Date.now());
+                        let retryUrl;
+                        if(window.__REMOTE_PORTFOLIO_BASE){
+                            retryUrl = window.__REMOTE_PORTFOLIO_BASE + encodeURIComponent(driveFile) + '&cb=' + Date.now();
+                        } else {
+                            const cfg = (window.RMU_CONFIG||{}); const base = (cfg.BACKEND_BASE||'').replace(/\/$/, '');
+                            retryUrl = base ? (base + '/api/download?id=' + encodeURIComponent(driveFile) + '&cb=' + Date.now()) : (driveFile + (driveFile.includes('?')?'&':'?') + 'cb=' + Date.now());
+                        }
                         setTimeout(()=>fetchWithRetry(retryUrl, attempt+1), delay);
                     } else {
                         setTimeout(()=>fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`, attempt+1), delay);
@@ -149,13 +186,19 @@
                     const btn = document.createElement('button');
                     btn.textContent = 'Retry';
                     btn.style.cssText='margin-left:12px;padding:4px 10px;font-size:12px;border:1px solid #c33;background:#b22222;color:#fff;border-radius:6px;cursor:pointer;';
-                    btn.onclick=()=>{ btn.disabled=true; pre.textContent='Retrying...';
-                                                                                        if(driveFile){
-                                                                                                const retryUrl = window.__REMOTE_PORTFOLIO_BASE ? (window.__REMOTE_PORTFOLIO_BASE + encodeURIComponent(driveFile) + '&cb=' + Date.now()) : (driveFile + (driveFile.includes('?')?'&':'?') + 'cb=' + Date.now());
-                        fetchWithRetry(retryUrl,1);
-                      } else {
-                        fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`,1);
-                      }
+                                        btn.onclick=()=>{ btn.disabled=true; pre.textContent='Retrying...';
+                                            if(driveFile){
+                                                let retryUrl;
+                                                if(window.__REMOTE_PORTFOLIO_BASE){
+                                                    retryUrl = window.__REMOTE_PORTFOLIO_BASE + encodeURIComponent(driveFile) + '&cb=' + Date.now();
+                                                } else {
+                                                    const cfg = (window.RMU_CONFIG||{}); const base = (cfg.BACKEND_BASE||'').replace(/\/$/, '');
+                                                    retryUrl = base ? (base + '/api/download?id=' + encodeURIComponent(driveFile) + '&cb=' + Date.now()) : (driveFile + (driveFile.includes('?')?'&':'?') + 'cb=' + Date.now());
+                                                }
+                                                fetchWithRetry(retryUrl,1);
+                                            } else {
+                                                fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`,1);
+                                            }
                     };
                     pre.appendChild(btn);
                 }
@@ -276,7 +319,12 @@
                 // Re-fetch with fresh cache buster and re-adopt
                                 let refetchUrl;
                                                 if(driveFile){
-                                                    refetchUrl = window.__REMOTE_PORTFOLIO_BASE ? (window.__REMOTE_PORTFOLIO_BASE + encodeURIComponent(driveFile) + '&bf=' + Date.now()) : (driveFile + (driveFile.includes('?')?'&':'?') + 'bf=' + Date.now());
+                                                    if(window.__REMOTE_PORTFOLIO_BASE){
+                                                        refetchUrl = window.__REMOTE_PORTFOLIO_BASE + encodeURIComponent(driveFile) + '&bf=' + Date.now();
+                                                    } else {
+                                                        const cfg = (window.RMU_CONFIG||{}); const base = (cfg.BACKEND_BASE||'').replace(/\/$/, '');
+                                                        refetchUrl = base ? (base + '/api/download?id=' + encodeURIComponent(driveFile) + '&bf=' + Date.now()) : (driveFile + (driveFile.includes('?')?'&':'?') + 'bf=' + Date.now());
+                                                    }
                                 } else {
                                     refetchUrl = file.includes('?') ? `${file}&bf=${Date.now()}` : `${file}?bf=${Date.now()}`;
                                 }
@@ -777,7 +825,7 @@
 <button id="drive-selftest" onclick="app.runDriveSelfTest()" style="display:none;position:fixed;top:190px;right:10px;z-index:9999;">Test Drive Sync</button>
 <script>
 // Google Identity Services (GIS) + gapi.client integration
-const CLIENT_ID = '230626308317-ts08shmn77745hq81ghu5q7e2s2i0gf9.apps.googleusercontent.com';
+const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) || window.GOOGLE_CLIENT_ID || '230626308317-ts08shmn77745hq81ghu5q7e2s2i0gf9.apps.googleusercontent.com';
 // Minimal scope: appDataFolder only (hidden per-user storage). Legacy migration handled manually via Import JSON.
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
 
