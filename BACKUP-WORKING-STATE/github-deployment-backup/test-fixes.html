@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Fixed Portfolio</title>
+</head>
+<body>
+    <h1>Testing Portfolio Fixes</h1>
+    <p>Open the browser console to see if errors are resolved.</p>
+    
+    <script>
+        // Test if generateFilesIndex is properly defined
+        console.log('Testing generateFilesIndex...');
+        
+        // Load the actual index.html content to test
+        fetch('./index.html')
+            .then(response => response.text())
+            .then(html => {
+                // Check if generateFilesIndex function is defined early
+                const hasEarlyDefinition = html.includes('async function generateFilesIndex()') && 
+                                         html.indexOf('async function generateFilesIndex()') < html.indexOf('Portfolio Welcome & Authentication System');
+                
+                console.log('✅ generateFilesIndex defined early:', hasEarlyDefinition);
+                
+                // Check if Google API initialization is improved
+                const hasImprovedAuth = html.includes('while(typeof gapi === \'undefined\' && retries < 10)');
+                console.log('✅ Improved Google API initialization:', hasImprovedAuth);
+                
+                // Check if favicon is added
+                const hasFavicon = html.includes('link rel="icon"');
+                console.log('✅ Favicon added:', hasFavicon);
+                
+                // Check if backend test uses root endpoint
+                const usesRootEndpoint = html.includes('${backendBase}/`,');
+                console.log('✅ Backend test uses root endpoint:', usesRootEndpoint);
+                
+                if (hasEarlyDefinition && hasImprovedAuth && hasFavicon && usesRootEndpoint) {
+                    console.log('🎉 All fixes applied successfully!');
+                } else {
+                    console.log('⚠️ Some fixes may not have been applied correctly.');
+                }
+            })
+            .catch(err => {
+                console.error('Error loading index.html:', err);
+            });
+    </script>
+</body>
+</html>

@@ -1,17 +1,13 @@
-// auth.js - modernized Google auth helpers using Google Identity Services only
+// auth.js - centralized Google auth helpers
 (function(){
   const cfg = (window.RMU_CONFIG || {});
   const CLIENT_ID = cfg.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID || 'YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com';
   const VC_EMAIL = (cfg.VC_EMAIL || 'rmuportfolioa@gmail.com').toLowerCase();
 
-  // Store current auth state
-  let currentToken = null;
-  let currentUserEmail = null;
-
-  // Ensure Google Identity Services is available
+  // Ensure GIS script is available; if not, callers should wait.
   function _ensureGisReady(){
     return new Promise((resolve)=>{
-      if(window.google && google.accounts){ return resolve(); }
+      if(window.google && google.accounts && google.accounts.id){ return resolve(); }
       const t = setInterval(()=>{
         if(window.google && google.accounts){ clearInterval(t); resolve(); }
       }, 200);
@@ -19,155 +15,48 @@
   }
 
   async function getIdToken(){
-    console.log('[Auth] Getting ID token using Google Identity Services...');
-    
-    // Return cached token if available
-    if (currentToken) {
-      console.log('[Auth] Using cached token');
-      return currentToken;
+    // Use gapi.auth2 if already used in your flow; otherwise fallback to GIS token client for ID token
+    if (typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance) {
+      const inst = gapi.auth2.getAuthInstance();
+      if (inst) {
+        const user = inst.currentUser && inst.currentUser.get ? inst.currentUser.get() : null;
+        if (user) {
+          const authResp = user.getAuthResponse && user.getAuthResponse();
+          if (authResp && (authResp.id_token || authResp.idToken)) {
+            return authResp.id_token || authResp.idToken;
+          }
+        }
+      }
     }
-    
-    // Use Google Identity Services to get a new token
+    // Fallback: use Google Identity Services One Tap to get a new ID token silently if possible
     await _ensureGisReady();
-    
-    try {
-      // Use the credential response approach
-      return new Promise((resolve, reject)=>{
-        google.accounts.id.initialize({ 
-          client_id: CLIENT_ID, 
-          callback: (resp)=>{
-            if(resp && resp.credential) {
-              currentToken = resp.credential;
-              console.log('[Auth] Got credential token from GIS');
-              return resolve(resp.credential);
-            }
-            reject(new Error('No credential from Google Identity Services'));
-          }
-        });
-        
-        // Try to get credential silently first
-        google.accounts.id.prompt((notification) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            console.log('[Auth] Silent credential request failed, user interaction required');
-            reject(new Error('User interaction required for authentication'));
-          }
-        });
-      });
-    } catch (e) { 
-      console.error('[Auth] ID token error:', e);
-      throw e; 
-    }
+    return new Promise((resolve, reject)=>{
+      try {
+        google.accounts.id.initialize({ client_id: CLIENT_ID, callback: (resp)=>{
+          if(resp && resp.credential) return resolve(resp.credential);
+          reject(new Error('No credential from GIS'));
+        }});
+        google.accounts.id.prompt();
+      } catch (e) { reject(e); }
+    });
   }
 
   function getCurrentUserEmail(){
-    // Only log if debugging is enabled to reduce console spam
-    if (window.DEBUG_AUTH || window.RMU_CONFIG?.DEBUG_MODE) {
-      console.log('[Auth] Getting current user email, cached:', currentUserEmail);
-    }
-    return currentUserEmail || '';
-  }
-
-  // Add rate limiting to prevent excessive auth calls
-  let lastAuthCall = 0;
-  const AUTH_CALL_COOLDOWN = 1000; // 1 second
-  
-  function shouldAllowAuthCall() {
-    const now = Date.now();
-    if (now - lastAuthCall < AUTH_CALL_COOLDOWN) {
-      return false;
-    }
-    lastAuthCall = now;
-    return true;
-  }
-
-  function setCurrentUserEmail(email) {
-    currentUserEmail = email ? email.toLowerCase() : '';
-    console.log('[Auth] Set current user email:', currentUserEmail);
+    try {
+      if (typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance) {
+        const inst = gapi.auth2.getAuthInstance();
+        const user = inst && inst.currentUser && inst.currentUser.get ? inst.currentUser.get() : null;
+        const profile = user && user.getBasicProfile && user.getBasicProfile();
+        const email = profile && profile.getEmail && profile.getEmail();
+        return (email||'').toLowerCase();
+      }
+    } catch(_) {}
+    return '';
   }
 
   function isAdmin(){
-    const email = getCurrentUserEmail();
-    const admin = email === VC_EMAIL;
-    console.log('[Auth] Is admin check:', email, 'vs', VC_EMAIL, '=', admin);
-    return admin;
+    return getCurrentUserEmail() === VC_EMAIL;
   }
 
-  // Modern authentication method using Google Identity Services with rate limiting
-  async function authenticateUser() {
-    if (!shouldAllowAuthCall()) {
-      console.log('[Auth] Rate limited - authentication call too frequent');
-      throw new Error('Authentication rate limited. Please wait before trying again.');
-    }
-    
-    console.log('[Auth] Starting modern authentication...');
-    
-    try {
-      await _ensureGisReady();
-      
-      return new Promise((resolve, reject) => {
-        const tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: CLIENT_ID,
-          scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-          callback: async (tokenResponse) => {
-            if (tokenResponse.error) {
-              console.error('[Auth] Token error:', tokenResponse.error);
-              reject(new Error(tokenResponse.error));
-              return;
-            }
-            
-            console.log('[Auth] Got access token, fetching user info...');
-            currentToken = tokenResponse.access_token;
-            
-            // Get user info with timeout
-            try {
-              const controller = new AbortController();
-              const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-              
-              const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-                headers: { 'Authorization': `Bearer ${tokenResponse.access_token}` },
-                signal: controller.signal
-              });
-              
-              clearTimeout(timeout);
-              
-              if (userInfoResponse.ok) {
-                const userInfo = await userInfoResponse.json();
-                setCurrentUserEmail(userInfo.email);
-                console.log('[Auth] User authenticated:', userInfo.email);
-                resolve({ token: tokenResponse.access_token, email: userInfo.email, userInfo });
-              } else {
-                reject(new Error(`Failed to get user info: ${userInfoResponse.status}`));
-              }
-            } catch (err) {
-              console.error('[Auth] User info fetch error:', err);
-              reject(new Error(`User info fetch failed: ${err.message}`));
-            }
-          }
-        });
-        
-        console.log('[Auth] Requesting access token...');
-        tokenClient.requestAccessToken({ prompt: 'consent' });
-      });
-      
-    } catch (error) {
-      console.error('[Auth] Authentication error:', error);
-      throw error;
-    }
-  }
-
-  window.RMU_AUTH = { 
-    getIdToken, 
-    isAdmin, 
-    getCurrentUserEmail, 
-    setCurrentUserEmail,
-    authenticateUser,
-    CLIENT_ID, 
-    VC_EMAIL 
-  };
-  
-  // Dispatch ready event
-  document.addEventListener('DOMContentLoaded', () => {
-    console.log('[Auth] RMU_AUTH system ready');
-    document.dispatchEvent(new CustomEvent('auth-ready'));
-  });
+  window.RMU_AUTH = { getIdToken, isAdmin, getCurrentUserEmail, CLIENT_ID, VC_EMAIL };
 })();

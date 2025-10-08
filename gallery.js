@@ -77,7 +77,13 @@
         const a = document.createElement('a');
         // Add timestamp to force fresh loading and prevent cache
         const timestamp = Date.now();
-        a.href = `portfolio.html?file=${encodeURIComponent(m.file)}&t=${timestamp}`;
+        if(window.__VC_MODE && window.__REMOTE_PORTFOLIO_BASE){
+          // In VC mode, use Drive file id if available; inline loader will fetch via backend
+          const driveRef = m.id || m.file;
+          a.href = `portfolio.html?driveFile=${encodeURIComponent(driveRef)}&t=${timestamp}`;
+        } else {
+          a.href = `portfolio.html?file=${encodeURIComponent(m.file)}&t=${timestamp}`;
+        }
         a.className = 'gal-row';
         a.setAttribute('role','listitem');
         a.setAttribute('data-name', (m.name||'').toLowerCase());
@@ -134,12 +140,6 @@
 
   let searchTimeout;
   function applyFilter(){
-    // In admin mode, gallery search should not interfere with admin list filtering
-    try {
-      if (window.__DISABLE_GALLERY_SEARCH || document.body.classList.contains('admin-mode')) {
-        return;
-      }
-    } catch(_) {}
     // Clear previous timeout to debounce rapid typing
     clearTimeout(searchTimeout);
     
@@ -152,7 +152,7 @@
         return; 
       }
       
-      // Search across combined terms (name + filename)
+      // Search across prepared terms: name + filename (+ roll/email if present)
       filtered = metaList.filter(m => {
         const terms = m._terms || (m._name || '') + ' ' + (m.file || '');
         return terms.includes(q);
@@ -163,9 +163,41 @@
   }
 
   async function loadIndex(){
-    // Skip index loading when admin mode is active
-    try { if (document.body.classList.contains('admin-mode')) return; } catch(_) {}
     setStatus('Loading portfolio index...');
+    // VC remote manifest mode: if VC flag active attempt remote manifest fetch first
+    if(window.__VC_MODE && window.__REMOTE_MANIFEST_URL){
+      try {
+        const remoteUrl = window.__REMOTE_MANIFEST_URL + (window.__REMOTE_MANIFEST_URL.includes('?')?'&':'?') + 'cb=' + Date.now();
+        const r = await fetch(remoteUrl, { cache:'no-store' });
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        const arr = await r.json();
+        if(!Array.isArray(arr)) throw new Error('Remote manifest malformed');
+        // Expect items like { id, file, roll, email, updatedAt }
+        metaList = arr.map(m => ({
+          id: m.id || null,
+          file: m.file || m.roll || 'unknown.json',
+          name: (m.name || m.roll || m.file || 'untitled').toString(),
+          roll: m.roll || '',
+          email: m.email || ''
+        }));
+        metaList.forEach(m => {
+          const name = (m.name||'').toLowerCase();
+          const file = (m.file||'').toLowerCase();
+          const roll = (m.roll||'').toLowerCase();
+          const email = (m.email||'').toLowerCase();
+          m._name = name;
+          m._terms = `${name} ${file} ${roll} ${email}`.trim();
+        });
+        filtered = metaList.slice();
+        render();
+        setStatus(metaList.length ? '' : 'No remote portfolios');
+        return; // Skip local path entirely in VC mode
+      } catch(e){
+        console.error('[vc-mode] Remote manifest load failed', e);
+        setStatus('Remote manifest failed.');
+        return; // Do not fall back to local enumeration (privacy)
+      }
+    }
     
     // Clear any previous portfolio data from memory/cache
     if(typeof localStorage !== 'undefined') {
@@ -193,7 +225,7 @@
       const arr = await resp.json();
       if(!Array.isArray(arr)) throw new Error('files.json malformed');
       
-      // Process the loaded data
+      // Process the loaded data - use filename only for template-based portfolios
       metaList = arr.map(m => ({
         file: m.file,
         name: m.name || m.file || 'untitled'

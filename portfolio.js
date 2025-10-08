@@ -55,6 +55,25 @@ function runIfPresent(selector, fn, ctx = document) {
   }
 }
 
+// -------------------------------------------------------------
+// RMU Roll Number helpers
+// Allowed format: 000-R00-X (3 digits)-(R)(2 digits)-(single letter)
+// Examples: 123-R52-B, 007-R01-A
+// -------------------------------------------------------------
+function isValidRoll(r) {
+  if (!r) return false;
+  const s = String(r).trim().toUpperCase();
+  return /^\d{3}-R\d{2}-[A-Z]$/.test(s);
+}
+
+function normalizeRoll(r) {
+  if (!r) return '000-R00-X';
+  const s = String(r).trim().toUpperCase();
+  if (isValidRoll(s)) return s;
+  // Not valid -> return placeholder format and let caller decide UX
+  return '000-R00-X';
+}
+
 class PortfolioApp {
   constructor() {
     this.currentSection = 'personal';
@@ -180,15 +199,7 @@ class PortfolioApp {
     // Load personal info from localStorage if present
     this.loadPersonalInfo();
     // Attempt to initialize Google Drive client if client id/key provided
-    try { 
-      if (typeof this.initGoogleDriveClient === 'function') {
-        this.initGoogleDriveClient();
-      } else {
-        console.debug('initGoogleDriveClient method not available - this is normal for static deployments');
-      }
-    } catch (e) { 
-      console.debug('Google Drive client init skipped:', e.message); 
-    }
+    try { this.initGoogleDriveClient(); } catch (e) { console.warn('Google Drive client init skipped', e); }
   }
 
   loadPersonalInfo() {
@@ -200,7 +211,7 @@ class PortfolioApp {
         firstName: 'Abdul Haseeb Ahmad',
         title: "Abdul Haseeb's Medfolio",
         bio: 'Passionate medical student dedicated 1. To impart evidence based research oriented medical education. 2. To provide best possible patient care. 3. To inculcate the values of mutual respect and ethical practice of medicine.',
-        rollNo: '000-R00-X',
+        rollNo: '123',
         registrationNo: 'RMU-MBBS-2024-001',
         programEnrolled: 'MBBS',
         fatherName: 'Muhammad Athar',
@@ -211,15 +222,6 @@ class PortfolioApp {
       
       // Merge defaults with existing data
       const personalInfo = { ...defaults, ...data };
-      
-      // Normalize roll number format if needed
-      const rollNoValidator = window.rollNoValidator;
-      if (personalInfo.rollNo && rollNoValidator && !rollNoValidator.isValid(personalInfo.rollNo)) {
-        console.log('[Portfolio] Normalizing invalid roll number:', personalInfo.rollNo);
-        personalInfo.rollNo = '000-R00-X';
-        // Update localStorage with normalized data
-        localStorage.setItem('personalInfo', JSON.stringify(personalInfo));
-      }
       
       // Updated field mapping for new RMU structure
       const fieldMapping = {
@@ -568,37 +570,18 @@ class PortfolioApp {
   
   // Save RMU field edit
   saveRmuFieldEdit(fieldElement) {
-    console.log('[Portfolio] saveRmuFieldEdit called with element:', fieldElement);
-    
     const span = fieldElement.querySelector('span');
     const input = fieldElement.querySelector('input, textarea');
     
-    if (!span || !input) {
-      console.log('[Portfolio] Missing span or input element');
-      return;
-    }
+    if (!span || !input) return;
     
-    const fieldName = fieldElement.dataset.field;
-    let sanitizedValue = input.value.trim().replace(/\s+/g, ' ');
-    
-    console.log('[Portfolio] Field name:', fieldName, 'Value:', sanitizedValue);
-    
-    // Normalize roll number format (ensure uppercase) but don't validate here
-    // Validation will happen when Save button is clicked
-    if (fieldName === 'rollNo') {
-      console.log('[Portfolio] Processing roll number field - normalizing format only');
-      sanitizedValue = sanitizedValue.toUpperCase();
-      console.log('[Portfolio] Normalized roll number:', sanitizedValue);
-    }
-    
-    // Update span with new value
+    // Update span with new value (sanitize input)
+    const sanitizedValue = input.value.trim().replace(/\s+/g, ' ');
     span.textContent = sanitizedValue;
     
     // Show span, hide input
     input.style.display = 'none';
     span.style.display = 'block';
-    
-    console.log('[Portfolio] Field saved successfully:', fieldName, '=', sanitizedValue);
   }
   
   // Cancel RMU field edit
@@ -1003,6 +986,12 @@ class PortfolioApp {
       const achievements = Array.isArray(raw.achievements) ? raw.achievements.map(normalizeEntry).filter(Boolean) : [];
       const reflections = Array.isArray(raw.reflections) ? raw.reflections.map(normalizeEntry).filter(Boolean) : [];
       const personalInfo = raw.personalInfo || {};
+      // If roll is present but not in RMU format, clear it without altering other fields
+      try {
+        if (typeof personalInfo.rollNo !== 'undefined' && personalInfo.rollNo !== null) {
+          if (!isValidRoll(personalInfo.rollNo)) personalInfo.rollNo = '';
+        }
+      } catch(_){}
       const profilePhoto = raw.profilePhoto || null;
       return { achievements, reflections, personalInfo, profilePhoto };
     }
@@ -1056,65 +1045,8 @@ class PortfolioApp {
       }
     }
 
-    // Load user portfolio data (similar to loadDataDirectly but for user mode)
-    loadUserPortfolioData(portfolioData) {
-      try {
-        console.log('[loadUserPortfolioData] Loading user portfolio data from Drive');
-        
-        // Normalize the data
-        const normalizedData = this.normalizeLoadedData(portfolioData || {});
-        
-        // Clear previous state
-        this.achievements = [];
-        this.reflections = [];
-        
-        // Load the data
-        this.achievements = normalizedData.achievements || [];
-        this.reflections = normalizedData.reflections || [];
-        
-        // Set personal info and photo
-        if(normalizedData.personalInfo) {
-          try {
-            localStorage.setItem('personalInfo', JSON.stringify(normalizedData.personalInfo));
-          } catch(e) {
-            console.warn('[loadUserPortfolioData] Could not save personalInfo to localStorage:', e);
-          }
-        }
-        
-        if(normalizedData.profilePhoto) {
-          try {
-            localStorage.setItem('profilePhoto', normalizedData.profilePhoto);
-          } catch(e) {
-            console.warn('[loadUserPortfolioData] Could not save profilePhoto to localStorage:', e);
-          }
-        } else {
-          try {
-            localStorage.removeItem('profilePhoto');
-          } catch(e) {
-            console.warn('[loadUserPortfolioData] Could not remove profilePhoto from localStorage:', e);
-          }
-        }
-        
-        // Render everything
-        this.loadPersonalInfo();
-        this.renderAchievements();
-        this.renderReflections();
-        this.updateLinkedAchievements();
-        
-        // Show sections
-        document.querySelectorAll('#personal.section, #descriptive.section, #reflective.section').forEach(section => {
-          section.style.visibility = 'visible';
-        });
-        
-        // Remove loading state
-        document.body.classList.remove('loading-initial');
-        
-        console.log('[loadUserPortfolioData] Successfully loaded user portfolio data from Drive');
-        
-      } catch(err) {
-        console.error('[loadUserPortfolioData] Failed to load user data:', err);
-      }
-    }
+  
+  
 
   // Helper: returns currently selected descriptive category ('' means all)
   getActiveDescriptiveCategory() {
@@ -1148,6 +1080,13 @@ class PortfolioApp {
 
   // Personal Info Management
   toggleEditPersonal(editing) {
+                const personalInfo = raw.personalInfo || {};
+                // If roll is present but not in RMU format, clear it (do not auto-rewrite)
+                try {
+                  if (personalInfo && typeof personalInfo.rollNo !== 'undefined' && personalInfo.rollNo !== null) {
+                    if (!isValidRoll(personalInfo.rollNo)) personalInfo.rollNo = '';
+                  }
+                } catch(_){}
     this.isEditing = editing;
     
     // Toggle edit controls visibility
@@ -1194,42 +1133,6 @@ class PortfolioApp {
   }
 
   savePersonal() {
-    console.log('[Portfolio] savePersonal called - validating all fields before saving');
-    
-    // Get roll number input for validation
-    const rollNoInput = document.getElementById('rollNo');
-    if (rollNoInput) {
-      const rollNoValue = rollNoInput.value.trim();
-      console.log('[Portfolio] Checking roll number before save:', rollNoValue);
-      
-      // Validate roll number format using the validator
-      const rollNoValidator = window.rollNoValidator;
-      if (rollNoValidator && rollNoValue) {
-        const isValidRollNo = rollNoValidator.isValid(rollNoValue);
-        console.log('[Portfolio] Roll number validation result:', isValidRollNo);
-        
-        if (!isValidRollNo) {
-          console.log('[Portfolio] ❌ Invalid roll number detected during save - showing popup');
-          
-          // Show the validation popup
-          if (rollNoValidator.showGuide) {
-            rollNoValidator.showGuide();
-            console.log('[Portfolio] 🚨 Popup shown - save operation cancelled');
-          }
-          
-          // Focus on the roll number field to highlight the issue
-          rollNoInput.focus();
-          if (rollNoInput.select) rollNoInput.select();
-          
-          // Prevent saving - return early without toggling edit mode
-          console.log('[Portfolio] 🚫 Save operation blocked due to invalid roll number');
-          return false;
-        } else {
-          console.log('[Portfolio] ✅ Roll number format is valid - proceeding with save');
-        }
-      }
-    }
-    
     // Store original values for rollback
     const originalData = JSON.parse(localStorage.getItem('personalInfo') || '{}');
     
@@ -1239,20 +1142,14 @@ class PortfolioApp {
       'fatherName', 'email', 'phone', 'session'
     ];
     
-    const saved = {};
+  const saved = {};
     
     fields.forEach(id => {
       const input = document.getElementById(id);
       const display = document.getElementById(id + '-display');
       if (input && display) {
-        // Normalize roll number to uppercase if it's valid
-        let value = input.value;
-        if (id === 'rollNo' && value) {
-          value = value.trim().toUpperCase();
-          input.value = value; // Update input with normalized value
-        }
-        display.textContent = value;
-        saved[id] = value;
+        display.textContent = input.value;
+        saved[id] = input.value;
       }
     });
     
@@ -1262,16 +1159,146 @@ class PortfolioApp {
     const avatarFallback = document.querySelector('.avatar-fallback');
     if (avatarFallback) { avatarFallback.textContent = initials; }
 
+    // Enforce RMU roll format on save
+    if (saved.rollNo != null) {
+      const current = String(saved.rollNo || '').trim();
+      const normalized = normalizeRoll(current);
+      if (!isValidRoll(current)) {
+        // Update UI fields with placeholder
+        const input = document.getElementById('rollNo');
+        const display = document.getElementById('rollNo-display');
+        if (input) input.value = normalized;
+        if (display) display.textContent = normalized;
+        saved.rollNo = normalized;
+
+        // Show RMU-themed blocking modal to explain format; user must close and re-enter
+        try {
+          let modal = document.getElementById('rmu-roll-format-modal');
+          if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'rmu-roll-format-modal';
+            modal.style.position = 'fixed';
+            modal.style.inset = '0';
+            modal.style.background = 'rgba(10,20,40,.55)';
+            modal.style.backdropFilter = 'saturate(1.1) blur(3px)';
+            modal.style.display = 'flex';
+            modal.style.alignItems = 'center';
+            modal.style.justifyContent = 'center';
+            modal.style.zIndex = '10001';
+            modal.innerHTML = `
+              <div style="width:min(520px,92vw);background:#fff;border-radius:16px;border:1px solid #d8e0ea;box-shadow:0 24px 64px -16px rgba(16,40,80,.35);padding:20px;position:relative;">
+                <button id="rmu-roll-close" aria-label="Close" style="position:absolute;right:10px;top:10px;background:#6e1c17;color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-weight:700;">×</button>
+                <h3 style="margin:0 0 8px 0;font:700 18px Inter,system-ui,sans-serif;color:#0b2340;">Roll number format required</h3>
+                <p style="margin:6px 0 10px 0;font:13px/1.5 Inter,system-ui,sans-serif;color:#3a4b61;">Please enter your Roll number in the format <strong>000-R00-X</strong>.<br/>
+                Example: <code>123-R52-B</code> — here <strong>52</strong> after <strong>R</strong> is your RMU batch (e.g., 52) and <strong>X</strong> is your sub-batch (A, B, …).</p>
+                <div style="background:#fff7ed;border:1px solid #facc15;color:#713f12;border-radius:10px;padding:10px 12px;font:12px Inter,system-ui,sans-serif;">Your previous entry doesn’t match this format. We set a placeholder. Click × and rewrite your roll correctly.</div>
+              </div>`;
+            document.body.appendChild(modal);
+            const close = modal.querySelector('#rmu-roll-close');
+            if (close) close.addEventListener('click', () => { modal.remove(); });
+          }
+        } catch(_) { /* non-fatal */ }
+        this.showToast('Roll number must match 000-R00-X (e.g., 123-R52-B).', 'warning');
+      } else {
+        // Ensure consistent casing
+        saved.rollNo = current.toUpperCase();
+      }
+    }
+
     // Persist to localStorage
     localStorage.setItem('personalInfo', JSON.stringify(saved));
-    console.log('[Portfolio] ✅ Personal info saved successfully');
 
     this.toggleEditPersonal(false);
     this.showToast('Personal information updated successfully', 'success');
     // Re-run linkify so newly-saved text becomes clickable where appropriate
     try { this.linkifyPersonalInfo(); } catch (e) { /* ignore */ }
-    
-    return true;
+  }
+
+  // Save a copy of current portfolio JSON into appDataFolder using RMU roll filename
+  async saveToAppDataByRoll() {
+    try {
+      const personal = JSON.parse(localStorage.getItem('personalInfo') || '{}');
+      const rollRaw = personal.rollNo || personal.roll || personal.rollNumber || '';
+      const roll = isValidRoll(rollRaw) ? String(rollRaw).toUpperCase() : null;
+      if (!roll) {
+        this.showToast('Cannot save to Drive: invalid roll format. Please correct it first.', 'warning');
+        return false;
+      }
+      const namePart = (personal.fullName || personal.studentName || [personal.firstName, personal.lastName].filter(Boolean).join(' ') || 'Portfolio')
+        .replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+      const filename = `${namePart}_${roll}.json`;
+      const payload = { achievements: this.achievements||[], reflections: this.reflections||[], personalInfo: personal, profilePhoto: localStorage.getItem('profilePhoto')||null };
+      await this._putJsonInAppData(filename, payload);
+      this.showToast(`Saved a copy to Drive appData as ${filename}`, 'success');
+      return true;
+    } catch (e) {
+      console.error('saveToAppDataByRoll error', e);
+      this.showToast('Failed saving to Drive appData', 'error');
+      return false;
+    }
+  }
+
+  // Append a log entry to appDataFolder (rmu-save-log.json)
+  async appendSaveLog(context = 'save-to-server') {
+    try {
+      const email = (window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail && RMU_AUTH.getCurrentUserEmail()) || '';
+      const personal = JSON.parse(localStorage.getItem('personalInfo') || '{}');
+      const roll = personal.rollNo || personal.roll || personal.rollNumber || '';
+      const entry = { email, roll, context, at: new Date().toISOString() };
+      const filename = 'rmu-save-log.json';
+      // Load existing log if any
+      let file = await this.findDriveFileInAppData(filename).catch(()=>null);
+      let logArr = [];
+      if (file && file.id) {
+        try {
+          const res = await gapi.client.request({ path: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, method: 'GET' });
+          const data = res.result;
+          if (Array.isArray(data)) logArr = data; else if (data && Array.isArray(data.entries)) logArr = data.entries;
+        } catch(_) { /* ignore */ }
+      }
+      logArr.push(entry);
+      await this._putJsonInAppData(filename, logArr);
+    } catch (e) {
+      console.warn('appendSaveLog failed', e);
+    }
+  }
+
+  // Internal helper: create or update a JSON file in appDataFolder by name
+  async _putJsonInAppData(filename, obj) {
+    const content = JSON.stringify(obj || {}, null, 2);
+    const metadata = { name: filename, mimeType: 'application/json' };
+    let existing = await this.findDriveFileInAppData(filename).catch(()=>null);
+    const boundary = '-------314159265358979323846';
+    const delimiter = "\r\n--" + boundary + "\r\n";
+    const close_delim = "\r\n--" + boundary + "--";
+    const multipartRequestBody =
+      delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) +
+      delimiter + 'Content-Type: application/json\r\n\r\n' + content + close_delim;
+    if (existing && existing.id) {
+      await gapi.client.request({
+        path: 'https://www.googleapis.com/upload/drive/v3/files/' + existing.id + '?uploadType=multipart',
+        method: 'PATCH',
+        headers: { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
+        body: multipartRequestBody
+      });
+    } else {
+      await gapi.client.request({
+        path: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+        method: 'POST',
+        headers: { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
+        body: multipartRequestBody,
+        // Ensure file is created in appDataFolder
+        params: { uploadType: 'multipart' }
+      });
+      // Move it to appDataFolder by specifying parents on metadata alone may not be enough in this path
+      try {
+        await gapi.client.request({
+          path: 'https://www.googleapis.com/drive/v3/files',
+          method: 'POST',
+          body: JSON.stringify({ name: filename, parents: ['appDataFolder'], mimeType: 'application/json' })
+        });
+      } catch(_) {}
+    }
   }
 
   cancelPersonal() {
@@ -1585,7 +1612,11 @@ class PortfolioApp {
   }
 
   renderAchievements() {
-    const container = document.getElementById('achievements-container');
+    const container = document.getElementById('achievements-list');
+    if (!container) {
+      console.warn('[renderAchievements] Container #achievements-list not found');
+      return;
+    }
     
     if (this.achievements.length === 0) {
       container.innerHTML = `
@@ -1666,18 +1697,8 @@ class PortfolioApp {
           const row = document.createElement('div');
           row.className = 'attachment-item';
 
-          // Decide open URL: for PPT files, prefer Office Online viewer if URL is publicly addressable
+          // Use URL as-is for all file types
           let openUrl = url;
-          if (typeKey === 'ppt') {
-            try {
-              if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
-                openUrl = 'https://view.officeapps.live.com/op/view.aspx?src=' + encodeURIComponent(url);
-              } else {
-                // blob: or data: URLs are not accessible to Office Online — open directly
-                openUrl = url;
-              }
-            } catch (e) { openUrl = url; }
-          }
 
           // Make the filename itself the clickable open link (styled as a prominent control)
           const nameLink = document.createElement('a');
@@ -1689,7 +1710,7 @@ class PortfolioApp {
           row.appendChild(nameLink);
 
           // If this is a PPT and the openUrl is not an http(s) URL, try to upload to Drive
-          // and open via Office Online viewer. This requires Drive integration (gapi) and auth.
+          // PowerPoint files will be downloaded directly.
           if (typeKey === 'ppt') {
             const isHttp = (typeof openUrl === 'string' && (openUrl.startsWith('http://') || openUrl.startsWith('https://')));
             if (!isHttp) {
@@ -1697,9 +1718,8 @@ class PortfolioApp {
               nameLink.addEventListener('click', async (ev) => {
                 ev.preventDefault(); ev.stopPropagation();
                 try {
-                  // Resolve the attachment data to a Blob if necessary
+                  // Simple download behavior for PowerPoint files
                   let blob = null;
-                  // If att.data is a data: URI string, convert via dataURLToBlob
                   const raw = att && (att.data || att);
                   if (typeof raw === 'string' && raw.startsWith('data:')) {
                     blob = this.dataURLToBlob(raw);
@@ -1710,27 +1730,26 @@ class PortfolioApp {
                     blob = new Blob([buf], { type: att.type || 'application/vnd.ms-powerpoint' });
                   }
 
-                  if (!blob) {
-                    this.showToast('Cannot prepare PPT for Office preview locally', 'error');
-                    // fallback: open the existing URL (may download)
+                  if (blob) {
+                    // Create blob URL and trigger download
+                    const bUrl = URL.createObjectURL(blob);
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = bUrl;
+                    downloadLink.download = filename;
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    // Revoke after a short delay
+                    setTimeout(() => { try { URL.revokeObjectURL(bUrl); } catch (e) {} }, 5000);
+                    this.showToast('Downloading ' + filename, 'success');
+                  } else {
+                    // Fallback: open the existing URL
                     window.open(openUrl, '_blank', 'noopener');
-                    return;
                   }
-
-                  // Download the PPT file directly (privacy compliant - no external uploads)
-                  // This ensures we only use drive.appdata scope, not drive.file scope
-                  const a = document.createElement('a');
-                  a.href = URL.createObjectURL(blob);
-                  a.download = filename || 'presentation.ppt';
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                  URL.revokeObjectURL(a.href);
-                  this.showToast('PPT file downloaded', 'success');
                   return;
                 } catch (err) {
                   console.error('Office preview upload failed', err);
-                  this.showToast('Unable to open PPT in Office Online: ' + (err && err.message ? err.message : ''), 'error');
+                  this.showToast('Unable to download PPT file: ' + (err && err.message ? err.message : ''), 'error');
                 }
               });
             }
@@ -1966,7 +1985,11 @@ class PortfolioApp {
   }
 
   renderReflections() {
-    const container = document.getElementById('reflections-container');
+    const container = document.getElementById('reflections-list');
+    if (!container) {
+      console.warn('[renderReflections] Container #reflections-list not found');
+      return;
+    }
     
     if (this.reflections.length === 0) {
       container.innerHTML = `
@@ -2058,16 +2081,8 @@ class PortfolioApp {
             const row = document.createElement('div');
             row.className = 'attachment-item';
 
+            // Use URL as-is for all file types
             let openUrl = url;
-            if (typeKey === 'ppt') {
-              try {
-                if (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
-                  openUrl = 'https://view.officeapps.live.com/op/view.aspx?src=' + encodeURIComponent(url);
-                } else {
-                  openUrl = url;
-                }
-              } catch (e) { openUrl = url; }
-            }
 
             const nameLink = document.createElement('a');
             nameLink.className = 'attachment-name attach-open';
@@ -2079,40 +2094,35 @@ class PortfolioApp {
             if (typeKey === 'ppt') {
               const isHttp = (typeof openUrl === 'string' && (openUrl.startsWith('http://') || openUrl.startsWith('https://')));
               if (!isHttp) {
-                nameLink.addEventListener('click', async (ev) => {
+                nameLink.addEventListener('click', (ev) => {
                   ev.preventDefault(); ev.stopPropagation();
-                  try {
-                    let blob = null;
-                    const raw = att && (att.data || att);
-                    if (typeof raw === 'string' && raw.startsWith('data:')) {
-                      blob = this.dataURLToBlob(raw);
-                    } else if (typeof Blob !== 'undefined' && raw instanceof Blob) {
-                      blob = raw;
-                    } else if (raw && (raw instanceof ArrayBuffer || ArrayBuffer.isView(raw))) {
-                      const buf = raw instanceof ArrayBuffer ? raw : raw.buffer;
-                      blob = new Blob([buf], { type: att.type || 'application/vnd.ms-powerpoint' });
-                    }
+                  // Simple download behavior for PowerPoint files
+                  let blob = null;
+                  const raw = att && (att.data || att);
+                  if (typeof raw === 'string' && raw.startsWith('data:')) {
+                    blob = this.dataURLToBlob(raw);
+                  } else if (typeof Blob !== 'undefined' && raw instanceof Blob) {
+                    blob = raw;
+                  } else if (raw && (raw instanceof ArrayBuffer || ArrayBuffer.isView(raw))) {
+                    const buf = raw instanceof ArrayBuffer ? raw : raw.buffer;
+                    blob = new Blob([buf], { type: att.type || 'application/vnd.ms-powerpoint' });
+                  }
 
-                    if (!blob) {
-                      this.showToast('Cannot prepare PPT for Office preview locally', 'error');
-                      window.open(openUrl, '_blank', 'noopener');
-                      return;
-                    }
-
-                    // Download the PPT file directly (privacy compliant - no external uploads)
-                    // This ensures we only use drive.appdata scope, not drive.file scope
-                    const a = document.createElement('a');
-                    a.href = URL.createObjectURL(blob);
-                    a.download = filename || 'presentation.ppt';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(a.href);
-                    this.showToast('PPT file downloaded', 'success');
-                    return;
-                  } catch (err) {
-                    console.error('Office preview upload failed', err);
-                    this.showToast('Unable to open PPT in Office Online: ' + (err && err.message ? err.message : ''), 'error');
+                  if (blob) {
+                    // Create blob URL and trigger download
+                    const bUrl = URL.createObjectURL(blob);
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = bUrl;
+                    downloadLink.download = filename;
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    // Revoke after a short delay
+                    setTimeout(() => { try { URL.revokeObjectURL(bUrl); } catch (e) {} }, 5000);
+                    this.showToast('Downloading ' + filename, 'success');
+                  } else {
+                    // Fallback: open the existing URL
+                    window.open(openUrl, '_blank', 'noopener');
                   }
                 });
               }
@@ -2140,6 +2150,10 @@ class PortfolioApp {
 
   updateLinkedAchievements() {
     const select = document.getElementById('reflection-linked');
+    if (!select) {
+      console.warn('[updateLinkedAchievements] Element #reflection-linked not found');
+      return;
+    }
     select.innerHTML = '<option value="">No linked achievement</option>' +
       this.achievements.map(achievement => 
         `<option value="${achievement.id}">${achievement.title}</option>`
@@ -2153,86 +2167,6 @@ class PortfolioApp {
     });
     this.editingAchievement = null;
     this.editingReflection = null;
-  }
-
-  // Helper function to generate standardized filename from personal info
-  generateStandardFilename(extension = '', fallback = 'portfolio') {
-    try {
-      console.log('[Portfolio] Generating standardized filename with extension:', extension);
-      
-      // Get personal info from localStorage and DOM
-      let personalInfo = {};
-      try {
-        personalInfo = JSON.parse(localStorage.getItem('personalInfo') || '{}');
-      } catch(e) {
-        console.warn('[Portfolio] Failed to parse localStorage personalInfo:', e);
-      }
-      
-      // Try multiple sources for student name
-      let studentName = personalInfo.studentName || 
-                       personalInfo.fullName || 
-                       personalInfo.firstName || 
-                       document.getElementById('studentName-display')?.textContent ||
-                       document.getElementById('firstName-display')?.textContent ||
-                       '';
-      
-      // Try multiple sources for roll number  
-      let rollNo = personalInfo.rollNo ||
-                   personalInfo.roll ||
-                   document.getElementById('rollNo-display')?.textContent ||
-                   '';
-      
-      console.log('[Portfolio] Found studentName:', studentName, 'rollNo:', rollNo);
-      
-      // Clean and format the values
-      studentName = String(studentName || '').trim();
-      rollNo = String(rollNo || '').trim();
-      
-      // Generate filename based on available data
-      let filename = '';
-      if (studentName && rollNo) {
-        // Both name and roll number available - ideal format
-        const cleanName = studentName.replace(/[^A-Za-z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
-        const cleanRoll = rollNo.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
-        filename = `${cleanName}-${cleanRoll}`;
-        console.log('[Portfolio] ✅ Generated full filename:', filename);
-      } else if (studentName) {
-        // Only name available
-        const cleanName = studentName.replace(/[^A-Za-z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
-        filename = `${cleanName}-portfolio`;
-        console.log('[Portfolio] ⚠️ Generated name-only filename:', filename);
-      } else if (rollNo) {
-        // Only roll number available
-        const cleanRoll = rollNo.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
-        filename = `student-${cleanRoll}`;
-        console.log('[Portfolio] ⚠️ Generated roll-only filename:', filename);
-      } else {
-        // Neither available - use fallback
-        filename = fallback;
-        console.log('[Portfolio] ❌ Using fallback filename:', filename);
-      }
-      
-      // Remove any remaining invalid characters and ensure reasonable length
-      filename = filename.replace(/[^A-Za-z0-9-]+/g, '-')
-                        .replace(/^-+|-+$/g, '')
-                        .toLowerCase();
-      
-      if (!filename) filename = fallback;
-      if (filename.length > 80) filename = filename.slice(0, 80);
-      
-      // Add extension if provided
-      if (extension) {
-        const ext = extension.startsWith('.') ? extension : '.' + extension;
-        filename = filename + ext;
-      }
-      
-      console.log('[Portfolio] 🎯 Final standardized filename:', filename);
-      return filename;
-      
-    } catch (error) {
-      console.error('[Portfolio] Error generating filename:', error);
-      return fallback + (extension ? (extension.startsWith('.') ? extension : '.' + extension) : '');
-    }
   }
 
   // Export visible portfolio content to PDF using html2canvas + jsPDF
@@ -2857,25 +2791,35 @@ class PortfolioApp {
         // Null reference (optional) for GC hint
         renderRoot = null;
       } catch (e) { /* ignore */ }
-  // Dynamic PDF filename using same logic as JSON export (title -> sanitized)
+  // Generate PDF filename from Full Name and Roll Number
   try {
     let personalInfo = {};
     try { personalInfo = JSON.parse(localStorage.getItem('personalInfo') || '{}'); } catch(_){}
-    let base = (personalInfo && personalInfo.title) || (document.getElementById('title-display')?.textContent) || 'portfolio-export';
+    
+    // Build filename parts using RMU roll format (000-R00-X)
+    let firstName = personalInfo.firstName || '';
+    let lastName = personalInfo.lastName || '';
+    let fullName = personalInfo.fullName || personalInfo.studentName || '';
+    if (!fullName && (firstName || lastName)) {
+      fullName = [firstName, lastName].filter(Boolean).join(' ');
+    }
+    const cleanName = (fullName || 'Portfolio').replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+    const rollRaw = personalInfo.rollNo || personalInfo.roll || personalInfo.rollNumber || '';
+    const normalizedRoll = normalizeRoll(rollRaw);
+
+    // Generate base filename using normalized roll when valid
+    let base = isValidRoll(normalizedRoll) ? `${cleanName}_${normalizedRoll}` : cleanName;
     base = String(base || '')
       .replace(/["'“”‘’]+/g, '')        // remove quotes/apostrophes
       .replace(/[^A-Za-z0-9]+/g, '-')    // non-alphanumerics -> dashes
       .replace(/^-+|-+$/g, '')           // trim leading/trailing dashes
       .toLowerCase();
-    // Use standardized filename instead of title-based filename
-    console.log('[Portfolio] 📄 Generating PDF filename using standardized format');
-    const baseFilename = this.generateStandardFilename('', 'portfolio-export');
+    if (!base) base = 'portfolio-export';
+    if (base.length > 80) base = base.slice(0,80);
     const datePart = new Date().toISOString().split('T')[0];
-    const filename = `${baseFilename}-${datePart}.pdf`;
-    
-    console.log('[Portfolio] 💾 Saving PDF with filename:', filename);
+    const filename = `${base}-${datePart}.pdf`;
     pdf.save(filename);
-    this.showToast(`📄 Exported ${filename}`, 'success');
+    this.showToast(`Exported ${filename}`, 'success');
   } catch (e) { this.showToast('Failed to save PDF', 'error'); }
     } catch (err) {
       console.error('exportToPdf error', err);
@@ -2963,26 +2907,8 @@ if (window.__ADMIN_PORTFOLIO_DATA) {
     // Clear the stored data
     window.__ADMIN_PORTFOLIO_DATA = null;
     window.__ADMIN_FILENAME = null;
-    // Prevent any auto-loader overrides
-    try {
-      window.__ADOPTED_SPECIFIC_PORTFOLIO = true;
-      localStorage.setItem('__lastPortfolioFile', 'admin-remote');
-      const pre = document.getElementById('preload-status'); if(pre) pre.remove();
-    } catch(_){ }
   } catch(err) {
     console.error('[Portfolio] Failed to load admin portfolio data:', err);
-  }
-}
-
-// Check if user portfolio data was received before app initialization
-if (window.__USER_PORTFOLIO_DATA) {
-  console.log('[Portfolio] Loading user portfolio data that was received earlier');
-  try {
-    app.loadUserPortfolioData(window.__USER_PORTFOLIO_DATA);
-    // Clear the stored data
-    window.__USER_PORTFOLIO_DATA = null;
-  } catch(err) {
-    console.error('[Portfolio] Failed to load user portfolio data:', err);
   }
 }
 
@@ -3115,63 +3041,98 @@ PortfolioApp.prototype.loadFromDrive = async function() {
   try {
     // Guard: ensure gapi is available before attempting to use it
     if (typeof gapi === 'undefined' || !gapi || !gapi.client) {
-      console.warn('[Drive] Google API not loaded, cannot access Drive');
-      this.showToast('Google Drive not available', 'warning');
+      this.showToast('Google API not loaded. Initialize Drive integration first.', 'error');
       this.hideLoadingBar(false);
       return;
     }
-    
-    // Ensure we have a valid token
-    const token = gapi.client.getToken && gapi.client.getToken();
-    if (!token || !token.access_token) {
-      console.warn('[Drive] No valid access token available');
-      this.showToast('Please sign in to access your Drive portfolio', 'warning');
-      this.hideLoadingBar(false);
-      return;
-    }
-    
-    console.log('[Drive] Searching for portfolio in appDataFolder...');
     const filename = 'portfolio-data.json';
-    const file = await this.findDriveFileInAppData(filename);
-    
+    let file = await this.findDriveFileInAppData(filename);
     if (!file) {
-      console.log('[Drive] No portfolio data found in user\'s appDataFolder.');
-      this.showToast('No existing portfolio found, creating new...', 'info');
-      await this.createDefaultPortfolioInAppData();
-      return;
+      console.log('No portfolio in appDataFolder — attempting to seed from local portfolio-data.json');
+      // Try to fetch repo copy and create appData file from it
+      try{
+        const repoData = await this._fetchRepoPortfolioJson();
+        if(repoData){
+          // Adopt immediately for UX
+          this.processLoadedPortfolioData(repoData);
+          // Persist to appDataFolder
+          try{ 
+            await this._createSpecificAppDataFile(filename, repoData); 
+            this.showToast('✅ Created your private portfolio from default template!', 'success'); 
+            this.hideLoadingBar(true, 'Portfolio created successfully!');
+            return; // Exit here since we've successfully loaded data
+          }
+          catch(e){ 
+            console.warn('Failed to persist default JSON to appData', e); 
+            this.showToast('⚠️ Portfolio loaded but failed to save to Drive', 'warning');
+            this.hideLoadingBar(true, 'Portfolio loaded (save failed)');
+            return; // Still exit since we have data
+          }
+        }
+      }catch(e){ console.warn('Repo seed fetch failed', e); }
+      if(!file){
+        // Fallback: create minimal empty file so subsequent saves work
+        try {
+          await this.createDefaultPortfolioInAppData();
+          file = await this.findDriveFileInAppData(filename).catch(()=>null);
+          if(!file){ 
+            this.showToast('❌ Failed to create portfolio file', 'error');
+            this.hideLoadingBar(false); 
+            return; 
+          }
+          this.showToast('📁 Created empty portfolio file', 'success');
+        } catch(e) {
+          console.error('Failed to create default portfolio:', e);
+          this.showToast('❌ Error creating portfolio file', 'error');
+          this.hideLoadingBar(false);
+          return;
+        }
+      }
     }
-    
-    console.log(`[Drive] Loading portfolio from: ${file.name}`);
-    this.showToast(`Loading portfolio: ${file.name}`, 'info');
-    
-    const res = await gapi.client.request({ 
-      path: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, 
-      method: 'GET' 
-    });
-    
+    const res = await gapi.client.request({ path: `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, method: 'GET' });
     const data = res.result;
     if (data) {
       this.processLoadedPortfolioData(data);
-      
-      // If loaded file has different name than expected, save a copy as portfolio-data.json
-      if (file.name !== 'portfolio-data.json') {
-        console.log(`[Drive] Loaded ${file.name}, saving as portfolio-data.json for consistency`);
-        setTimeout(() => {
-          this.saveToDrive(); // This will save as portfolio-data.json
-        }, 1000);
-      }
-      
-      this.showToast('Portfolio loaded successfully', 'success');
     } else {
       this.showToast('Failed to load portfolio data', 'error');
     }
   } catch (e) {
     console.error('loadFromDrive error', e);
-    this.showToast('Failed to load from Drive: ' + (e.message || 'Unknown error'), 'error');
+    this.showToast('Failed to load from Drive', 'error');
     this.hideLoadingBar(false);
     return;
   }
   this.hideLoadingBar(true);
+}
+
+// Internal: fetch portfolio-data.json from the same directory if present
+PortfolioApp.prototype._fetchRepoPortfolioJson = async function(){
+  try {
+    const url = 'portfolio-data.json?cb=' + Date.now();
+    const r = await fetch(url, { cache:'no-store' });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    if(!j || typeof j !== 'object') throw new Error('Invalid JSON');
+    return j;
+  } catch(e){ return null; }
+}
+
+// Internal: create a specific appData file with given JSON object
+PortfolioApp.prototype._createSpecificAppDataFile = async function(filename, obj){
+  const content = JSON.stringify(obj || { achievements:[], reflections:[], personalInfo:{}, profilePhoto:null }, null, 2);
+  const metadata = { name: filename, mimeType: 'application/json', parents: ['appDataFolder'] };
+  const boundary = '-------314159265358979323846';
+  const delimiter = "\r\n--" + boundary + "\r\n";
+  const close_delim = "\r\n--" + boundary + "--";
+  const multipartRequestBody =
+    delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(metadata) +
+    delimiter + 'Content-Type: application/json\r\n\r\n' + content + close_delim;
+  await gapi.client.request({
+    path: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    method: 'POST',
+    headers: { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
+    body: multipartRequestBody
+  });
 }
 
 // Export current in-memory + local personal info/profile photo JSON as a downloadable file
@@ -3181,39 +3142,44 @@ PortfolioApp.prototype.exportPortfolioJson = function(customName) {
     const profilePhoto = localStorage.getItem('profilePhoto') || null;
     const data = { achievements: this.achievements || [], reflections: this.reflections || [], personalInfo, profilePhoto };
 
-    console.log('[Portfolio] 📝 Generating JSON filename using standardized format');
-    
-    let filename;
+    // Determine base name: precedence -> explicit param -> personalInfo.title -> DOM title-display -> fallback
+    let base = (customName && String(customName).trim()) ||
+               (personalInfo && personalInfo.title) ||
+               (document.getElementById('title-display')?.textContent) ||
+               'portfolio-data';
+
+    // Generate filename from Full Name and RMU Roll Number (000-R00-X)
+    let firstName = personalInfo.firstName || '';
+    let lastName = personalInfo.lastName || '';
+    let fullName = personalInfo.fullName || personalInfo.studentName || '';
+    if (!fullName && (firstName || lastName)) {
+      fullName = [firstName, lastName].filter(Boolean).join(' ');
+    }
+    const cleanName = (fullName || 'Portfolio').replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
+    const rollRaw = personalInfo.rollNo || personalInfo.roll || personalInfo.rollNumber || '';
+    const normalizedRoll = normalizeRoll(rollRaw);
+
+    // Check if custom name provided first, otherwise use name + normalized RMU roll when valid
     if (customName && String(customName).trim()) {
-      // If explicit custom name provided, use it (for legacy compatibility)
-      console.log('[Portfolio] Using custom name:', customName);
-      let baseName = String(customName).trim()
-                    .replace(/["“”'‘’]+/g, '')
-                    .replace(/[^A-Za-z0-9]+/g, '-')
-                    .replace(/^-+|-+$/g, '')
-                    .toLowerCase();
-      if (!baseName) baseName = 'portfolio-data';
-      if (baseName.length > 80) baseName = baseName.slice(0, 80);
-      filename = baseName + '.json';
+      base = String(customName).trim();
+    } else if (isValidRoll(normalizedRoll)) {
+      base = `${cleanName}_${normalizedRoll}`;
     } else {
-      // Use standardized filename based on student name and roll number
-      console.log('[Portfolio] Generating standardized JSON filename');
-      filename = this.generateStandardFilename('json', 'portfolio-data');
+      base = cleanName;
     }
 
-    // Ensure filename safety and extension
-    try {
-      const dotIdx = filename.lastIndexOf('.');
-      const nameOnly = (dotIdx > 0 ? filename.slice(0, dotIdx) : filename)
-        .normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
-        .replace(/["“”'‘’]+/g, '')
-        .replace(/[^A-Za-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .toLowerCase()
-        .slice(0, 80) || 'portfolio-data';
-      filename = nameOnly + '.json';
-    } catch(_) {}
+    // Sanitize for filename: remove apostrophes/quotes, replace non-alphanumerics with dashes, collapse dashes
+    base = base.replace(/["'“”‘’]+/g, '')
+               .replace(/[^A-Za-z0-9]+/g, '-')
+               .replace(/^-+|-+$/g, '')
+               .toLowerCase();
+    // Clean the base filename
+    base = base.replace(/[^A-Za-z0-9_]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
+    if (!base || base === 'portfolio') base = 'portfolio-data';
+    // Limit length to avoid OS path issues
+    if (base.length > 60) base = base.slice(0, 60);
 
+    const filename = base + '.json';
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -3222,7 +3188,7 @@ PortfolioApp.prototype.exportPortfolioJson = function(customName) {
     document.body.appendChild(a);
     a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    this.showToast(`Downloaded ${filename}`, 'success');
+    this.showToast(`✅ Downloaded ${filename}`, 'success');
 
     // NOTE: The repository auto-loader currently only fetches 'portfolio-data.json'.
     // If you intend to place this exported file in the repo for auto-loading, rename it
@@ -3241,37 +3207,38 @@ PortfolioApp.prototype.handleImportJsonFile = function(file) {
     this.showToast('Please select a .json file', 'error');
     return;
   }
-  
-  console.log(`[Import] Starting import of: ${file.name}`);
   this.showLoadingBar();
-  this.showToast(`Importing ${file.name}...`, 'info');
-  
   const reader = new FileReader();
   reader.onload = async (e) => {
     try {
       const text = e.target.result;
       const data = JSON.parse(text);
       if (typeof data !== 'object') throw new Error('Invalid JSON structure');
-      
-      console.log('[Import] JSON parsed successfully, loading into portfolio...');
       this.processLoadedPortfolioData(data);
-      
-      // Always save imported data as portfolio-data.json in appDataFolder
-      console.log('[Import] Saving to Drive as portfolio-data.json...');
+      // After loading into memory, immediately persist to Drive (creates file if needed)
       await this.saveToDrive();
-      
-      this.showToast(`Successfully imported ${file.name} and saved to Drive`, 'success');
-      
-      console.log(`[Import] Import completed for: ${file.name}`);
+      this.showToast('Imported JSON and saved to your private Drive space', 'success');
+      // If the imported filename is NOT the canonical one expected by the site loader
+      // (which looks specifically for portfolio-data.json in the repo), automatically
+      // offer the correctly named file so the user can upload it without manual renaming.
+      try {
+        const importedNameLower = (file.name || '').toLowerCase();
+        if (importedNameLower !== 'portfolio-data.json') {
+          // Slight delay so the prior toast isn't overwritten instantly
+          setTimeout(()=>{
+            this.exportPortfolioJson('portfolio-data');
+            this.showToast('Provided canonical portfolio-data.json for repository upload', 'info');
+          }, 600);
+        }
+      } catch (canonErr) { /* non-fatal */ }
       this.hideLoadingBar(true);
     } catch (err) {
-      console.error('[Import] Import failed:', err);
+      console.error('Import JSON failed', err);
       this.showToast('Failed to import JSON: ' + (err && err.message ? err.message : 'Unknown error'), 'error');
       this.hideLoadingBar(false);
     }
   };
   reader.onerror = () => {
-    console.error('[Import] File read error');
     this.showToast('Failed to read selected file', 'error');
     this.hideLoadingBar(false);
   };
@@ -3332,9 +3299,6 @@ PortfolioApp.prototype.processLoadedPortfolioData = function(data) {
 // Create default portfolio file in appDataFolder for new users
 PortfolioApp.prototype.createDefaultPortfolioInAppData = async function() {
   try {
-    console.log('[Drive] Creating new portfolio in appDataFolder...');
-    this.showToast('Creating new portfolio...', 'info');
-    
     const filename = 'portfolio-data.json';
     
     // Get current localStorage data to preserve any existing work
@@ -3370,41 +3334,25 @@ PortfolioApp.prototype.createDefaultPortfolioInAppData = async function() {
       content +
       close_delim;
 
-    const res = await gapi.client.request({
+    await gapi.client.request({
       path: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
       method: 'POST',
       headers: { 'Content-Type': 'multipart/related; boundary="' + boundary + '"' },
       body: multipartRequestBody
     });
     
-    if (res.result && res.result.id) {
-      console.log('[Drive] Default portfolio created with ID:', res.result.id);
-      
-      // Load the data into the current session
-      this.processLoadedPortfolioData(defaultData);
-      
-      this.showToast('New portfolio created successfully', 'success');
-      
-      // Force UI update to show the loaded data
-      setTimeout(() => {
-        this.hideLoadingBar(true);
-      }, 500);
-    } else {
-      throw new Error('Failed to create file in Drive');
-    }
+    console.log('Created default portfolio file in appDataFolder');
   } catch (e) {
-    console.error('[Drive] createDefaultPortfolioInAppData error:', e);
-    this.showToast('Failed to create portfolio: ' + (e.message || 'Unknown error'), 'error');
-    this.hideLoadingBar(false);
+    console.error('Failed to create default portfolio file:', e);
     throw e;
   }
 }
 
-// PPT upload functionality removed for privacy compliance (Google API approval)
-// Files are now downloaded directly instead of uploaded to Drive with broader permissions
 
-// Anonymous upload and Office helper functions removed for privacy compliance
-// These functions used external services and complex iframe integrations
+
+// Upload to anonymous public hosts (best-effort). Returns a public URL or null.
+
+
 
 // -----------------------------------------------------------------------------
 // Drive Auto-Loader (monitor) - Updated for appDataFolder
@@ -3436,22 +3384,13 @@ PortfolioApp.prototype.createDefaultPortfolioInAppData = async function() {
       if (hasDriveToken()) {
         clearInterval(timer);
         try {
-          // Only auto-load if we're in user mode or have session data
-          const isUserMode = sessionStorage.getItem('isUserMode') === 'true';
-          const hasUserEmail = !!sessionStorage.getItem('userEmail');
-          
-          if (isUserMode && hasUserEmail && window.app && typeof window.app.loadFromDrive === 'function') {
-            console.log('[Drive] Token detected — auto-loading user portfolio from appDataFolder');
-            await window.app.loadFromDrive();
-          } else {
-            console.log('[Drive] Token available but not in user mode, skipping auto-load');
-          }
+          console.log('Drive token detected — auto-loading user portfolio from secure appDataFolder.');
+          await window.app.loadFromDrive();
         } catch (e) {
-          console.warn('[Drive] Auto-load failed:', e);
+          console.warn('Drive auto-load failed', e);
         }
       } else if (Date.now() - start > maxMs) {
         clearInterval(timer);
-        console.log('[Drive] Auto-load timeout - no token detected within 10s');
       }
     }, interval);
   }
@@ -3497,7 +3436,16 @@ PortfolioApp.prototype.initGoogleDriveClient = function() {
         await gapi.client.init(initObj);
         // Also initialize auth2 if available and we have a client id
         if (CLIENT_ID && gapi.auth2 && !gapi.auth2.getAuthInstance()) {
-          try { await gapi.auth2.init({ client_id: CLIENT_ID, scope: SCOPES }); } catch (e) { /* ignore */ }
+          try { 
+            await gapi.auth2.init({ client_id: CLIENT_ID, scope: SCOPES });
+            // Add auth state change listener for button visibility
+            const authInstance = gapi.auth2.getAuthInstance();
+            if(authInstance && typeof window.updateAuthState === 'function') {
+              authInstance.isSignedIn.listen(window.updateAuthState);
+              // Initial state
+              window.updateAuthState(authInstance.isSignedIn.get());
+            }
+          } catch (e) { /* ignore */ }
         }
         // mark initialized so we don't re-init
         gapi.client._initialized = true;
@@ -3509,4 +3457,29 @@ PortfolioApp.prototype.initGoogleDriveClient = function() {
   } catch (e) {
     console.warn('gapi.load failed', e);
   }
+};
+
+// ---------------------------------------------------------------------------
+// vcMode helper: can be called manually after alternate sign-in flows. It
+// checks current gapi auth user email and updates localStorage.vcMode.
+// Safe no-op if gapi/auth not available.
+// ---------------------------------------------------------------------------
+window.refreshVcModeStatus = function(){
+  try {
+    if(typeof gapi === 'undefined' || !gapi.auth2 || !gapi.auth2.getAuthInstance) return;
+    const inst = gapi.auth2.getAuthInstance();
+    if(!inst) return;
+    const user = inst.currentUser && inst.currentUser.get ? inst.currentUser.get() : null;
+    if(!user) return;
+    const profile = user.getBasicProfile && user.getBasicProfile();
+    const email = profile && profile.getEmail && profile.getEmail();
+    if(!email) return;
+    if(email.toLowerCase() === 'rmuportfolioa@gmail.com'){
+      if(localStorage.getItem('vcMode') !== '1') console.log('[vc-mode] Activated via refresh helper for', email);
+      localStorage.setItem('vcMode','1');
+    } else {
+      if(localStorage.getItem('vcMode') === '1') console.log('[vc-mode] Deactivated via refresh helper for', email);
+      localStorage.removeItem('vcMode');
+    }
+  } catch(e){ console.warn('refreshVcModeStatus failed', e); }
 };
