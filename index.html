@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" href="RMUlogo.png" />
   <link rel="shortcut icon" href="RMUlogo.png" type="image/png" />
     <meta name="referrer" content="no-referrer" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com https://accounts.google.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cdnjs.cloudflare.com https://script.google.com https://script.googleusercontent.com https://apis.google.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://*.run.app; frame-src https://accounts.google.com; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com https://accounts.google.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cdnjs.cloudflare.com https://script.google.com https://script.googleusercontent.com https://apis.google.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://content.googleapis.com https://*.run.app; frame-src https://accounts.google.com https://content.googleapis.com; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
   <link id="css-gallery" rel="stylesheet" href="gallery.css?v=20250928.1" />
   <link id="css-portfolio" rel="stylesheet" href="portfolio.css?v=20250930.1" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -100,6 +100,14 @@
     body.admin-mode .gal-title small::after{content:' • Admin Mode';color:#0a66c2;font-weight:600}
     body.admin-mode #gallery-grid .gal-row{cursor:pointer}
     body.admin-mode #gallery-grid .gal-row:hover{transform:translateY(-2px);box-shadow:0 8px 25px -8px rgba(10,70,150,.25)}
+    
+    /* Mobile responsiveness for admin controls */
+    @media (max-width: 768px) {
+      #admin-controls { display:none !important; }
+      body.admin-mode .gal-title small::after { display:none; }
+      .gal-search-wrapper { flex-direction:column; gap:8px; }
+      .gal-search-wrapper input { width:100%; }
+    }
   </style>
   <div id="welcome-overlay" class="welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
     <div class="welcome-modal">
@@ -226,12 +234,14 @@
       const adminRefresh = document.getElementById('admin-refresh');
       const scanToggle = document.getElementById('scan-toggle');
       
-      if(adminControls) adminControls.style.display = 'block';
-      if(adminRefresh) adminRefresh.style.display = 'inline-block';
+      // Only show admin controls on desktop
+      const isMobile = window.innerWidth <= 768;
+      if(adminControls && !isMobile) adminControls.style.display = 'block';
+      if(adminRefresh && !isMobile) adminRefresh.style.display = 'inline-block';
       if(scanToggle) scanToggle.checked = false; // Disable auto scan in admin mode
-      if(adminStatus) adminStatus.textContent = 'Admin';
+      if(adminStatus && !isMobile) adminStatus.textContent = 'Admin';
       
-      console.log('[Admin] Admin mode enabled');
+      console.log('[Admin] Admin mode enabled', isMobile ? '(mobile - controls hidden)' : '(desktop)');
     }
   const VC_EMAIL = (window.RMU_CONFIG && window.RMU_CONFIG.VC_EMAIL) ? window.RMU_CONFIG.VC_EMAIL : 'rmuportfolioa@gmail.com';
     function showVcOverlay(on){ const el = document.getElementById('vc-overlay'); if(el){ el.style.display = on?'flex':'none'; } }
@@ -294,6 +304,7 @@
         if(!idTok){ showVcOverlay(true); }
         // Enable admin mode UI
         enableAdminMode();
+        console.log('[vc-mode] Config check - BACKEND_BASE:', cfg.BACKEND_BASE, 'processed:', BACKEND);
         if(BACKEND){
           window.__REMOTE_MANIFEST_URL = BACKEND + '/api/list';
           window.__REMOTE_PORTFOLIO_BASE = BACKEND + '/api/download?id=';
@@ -322,6 +333,7 @@
           }catch(_){ /* ignore wrapper failures */ }
           console.log('[vc-mode] Enabled. Remote manifest:', window.__REMOTE_MANIFEST_URL);
         } else {
+          console.log('[vc-mode] BACKEND_BASE from config:', cfg.BACKEND_BASE);
           console.warn('BACKEND_BASE not configured; VC gallery disabled');
           showVcOverlay(true);
         }
@@ -410,15 +422,14 @@
                       // Check if this is the admin email - if so, stay on gallery in admin mode
                       const VC_EMAIL = (window.RMU_CONFIG && window.RMU_CONFIG.VC_EMAIL) ? window.RMU_CONFIG.VC_EMAIL : 'rmuportfolioa@gmail.com';
                       if(email && email.toLowerCase() === VC_EMAIL.toLowerCase()){
-                        // Admin user - enable VC mode and stay on gallery
+                        // Admin user needs ID token, not access token - redirect to proper admin flow
                         try{ 
                           localStorage.setItem('vcMode','1'); 
-                          sessionStorage.setItem('vcIdToken', tokenResponse.access_token); // Store token for admin operations
                           if(email) sessionStorage.setItem('userEmail', String(email));
                         }catch(_){ }
                         showWelcome(false);
-                        // Reload to activate VC mode
-                        location.reload();
+                        // Show VC overlay to get proper ID token
+                        showVcOverlay(true);
                         return;
                       }
                       

@@ -198,8 +198,10 @@ class PortfolioApp {
     this.showSection('personal');
     // Load personal info from localStorage if present
     this.loadPersonalInfo();
-    // Attempt to initialize Google Drive client if client id/key provided
-    try { this.initGoogleDriveClient(); } catch (e) { console.warn('Google Drive client init skipped', e); }
+    // Defer Drive client init until prototype methods are ready
+    setTimeout(() => {
+      try { this.initGoogleDriveClient(); } catch (e) { console.warn('Google Drive client init skipped', e); }
+    }, 0);
   }
 
   loadPersonalInfo() {
