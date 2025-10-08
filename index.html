@@ -314,11 +314,45 @@
           
           async function stuSignIn(){
             try{
+              const CLIENT_ID = window.GOOGLE_CLIENT_ID;
+              const SCOPES = 'https://www.googleapis.com/auth/drive.appdata openid email profile';
+              // Prefer modern GIS token client for reliability on GitHub Pages
+              if(window.google && google.accounts && google.accounts.oauth2){
+                const tokenClient = google.accounts.oauth2.initTokenClient({
+                  client_id: CLIENT_ID,
+                  scope: SCOPES,
+                  callback: async (tokenResponse) => {
+                    try{
+                      if(tokenResponse && tokenResponse.access_token){
+                        let email = '';
+                        try {
+                          // Fetch userinfo to capture email (optional)
+                          const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tokenResponse.access_token } });
+                          if(r.ok){ const info = await r.json(); email = (info && (info.email||'')) || ''; }
+                        } catch(_) { /* non-fatal */ }
+                        try{
+                          sessionStorage.setItem('isUserMode','true');
+                          if(email) sessionStorage.setItem('userEmail', String(email));
+                          sessionStorage.setItem('userToken', String(tokenResponse.access_token));
+                        }catch(_){ }
+                        window.location.href = 'portfolio.html?user=1';
+                      } else {
+                        setStuErr('Google did not return an access token. Please try again.');
+                      }
+                    }catch(e){ setStuErr('Sign-in handling failed.'); }
+                  }
+                });
+                try { tokenClient.requestAccessToken({ prompt: 'consent' }); return; } catch (e) {
+                  console.warn('GIS token request failed, falling back to gapi.auth2', e);
+                }
+              }
+
+              // Fallback to legacy gapi.auth2 if GIS path unavailable
               if(typeof gapi==='undefined'){ setStuErr('Google API not loaded yet. Please wait a moment.'); return; }
               await new Promise(res=> gapi.load('client:auth2', res));
-              const scopes = 'https://www.googleapis.com/auth/drive.appdata profile email openid';
+              const scopes = SCOPES;
               let auth = gapi.auth2.getAuthInstance();
-              if(!auth){ auth = await gapi.auth2.init({ client_id: window.GOOGLE_CLIENT_ID, scope: scopes }); }
+              if(!auth){ auth = await gapi.auth2.init({ client_id: CLIENT_ID, scope: scopes }); }
               let user = null;
               try {
                 user = await auth.signIn({ scope: scopes });
@@ -327,26 +361,15 @@
                 setStuErr('Google sign-in failed. Please try again or check pop-up blockers.');
                 return;
               }
-              // Check if this is VC email
               const profile = user.getBasicProfile && user.getBasicProfile();
               const email = profile && profile.getEmail && profile.getEmail();
-              if(email && email.toLowerCase() === 'rmuportfolioa@gmail.com'){
-                // Switch to VC mode
-                const authResp = user && user.getAuthResponse && user.getAuthResponse();
-                const idTok = authResp && (authResp.id_token || authResp.idToken);
-                if(idTok){
-                  try{ localStorage.setItem('vcMode','1'); sessionStorage.setItem('vcIdToken', idTok); }catch(_){ }
-                  location.reload(); // Reload in VC mode
-                  return;
-                }
-              }
-              // Student user: redirect to standalone portfolio with access token and email in sessionStorage
+              // Student redirect to standalone with token
               const authResp = user && user.getAuthResponse && user.getAuthResponse();
               const accessToken = authResp && authResp.access_token;
-              if(accessToken && email){
+              if(accessToken){
                 try{
                   sessionStorage.setItem('isUserMode','true');
-                  sessionStorage.setItem('userEmail', String(email));
+                  if(email) sessionStorage.setItem('userEmail', String(email));
                   sessionStorage.setItem('userToken', String(accessToken));
                 }catch(_){ }
                 window.location.href = 'portfolio.html?user=1';
