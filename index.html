@@ -92,6 +92,14 @@
     .welcome-btn-primary{background:linear-gradient(135deg,#6e1c17 0%,#55120f 100%);color:#fff;border:2px solid #55120f}
     .welcome-btn-ghost{background:rgba(110,28,23,.08);color:#6e1c17;border:2px solid #d4b071}
     .welcome-btn:hover{transform:translateY(-1px)}
+    
+    /* Admin Mode Styles */
+    .admin-btn{appearance:none;border:1px solid #d4dde7;border-radius:8px;padding:6px 12px;font:500 11px Inter,system-ui,sans-serif;background:#f8fafc;color:#0a66c2;cursor:pointer;transition:all 0.2s ease}
+    .admin-btn:hover{background:#e8f4ff;border-color:#0a66c2}
+    .admin-btn:disabled{opacity:0.5;cursor:not-allowed}
+    body.admin-mode .gal-title small::after{content:' • Admin Mode';color:#0a66c2;font-weight:600}
+    body.admin-mode #gallery-grid .gal-row{cursor:pointer}
+    body.admin-mode #gallery-grid .gal-row:hover{transform:translateY(-2px);box-shadow:0 8px 25px -8px rgba(10,70,150,.25)}
   </style>
   <div id="welcome-overlay" class="welcome-overlay" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
     <div class="welcome-modal">
@@ -210,6 +218,21 @@
           if (mode === 'student-mode') { if(cssGallery) cssGallery.disabled=true; if(cssPortfolio) cssPortfolio.disabled=false; }
           if (mode === 'vc-portfolio-mode') { if(cssGallery) cssGallery.disabled=false; if(cssPortfolio) cssPortfolio.disabled=false; }
         }
+        
+    function enableAdminMode() {
+      document.body.classList.add('admin-mode');
+      const adminControls = document.getElementById('admin-controls');
+      const adminStatus = document.getElementById('admin-status');
+      const adminRefresh = document.getElementById('admin-refresh');
+      const scanToggle = document.getElementById('scan-toggle');
+      
+      if(adminControls) adminControls.style.display = 'block';
+      if(adminRefresh) adminRefresh.style.display = 'inline-block';
+      if(scanToggle) scanToggle.checked = false; // Disable auto scan in admin mode
+      if(adminStatus) adminStatus.textContent = 'Admin';
+      
+      console.log('[Admin] Admin mode enabled');
+    }
   const VC_EMAIL = (window.RMU_CONFIG && window.RMU_CONFIG.VC_EMAIL) ? window.RMU_CONFIG.VC_EMAIL : 'rmuportfolioa@gmail.com';
     function showVcOverlay(on){ const el = document.getElementById('vc-overlay'); if(el){ el.style.display = on?'flex':'none'; } }
     function setVcError(msg){ const e=document.getElementById('vc-error'); if(e){ e.textContent=msg||''; e.style.display = msg?'block':'none'; } }
@@ -231,7 +254,12 @@
               const email = (payload && payload.email) ? String(payload.email) : '';
               if(!email){ setVcError('No email found in ID token.'); return; }
               if(email.toLowerCase() !== VC_EMAIL.toLowerCase()){ setVcError('This account is not authorized. Please use '+VC_EMAIL+'.'); return; }
-              try{ localStorage.setItem('vcMode','1'); sessionStorage.setItem('vcIdToken', idTok); }catch(_){ }
+              try{ 
+                localStorage.setItem('vcMode','1'); 
+                sessionStorage.setItem('vcIdToken', idTok);
+                if(email) sessionStorage.setItem('userEmail', String(email)); 
+              }catch(_){ }
+              showVcOverlay(false);
               // Reload so gallery boots in VC mode; token stays in sessionStorage
               location.reload();
             }catch(e){ setVcError('Sign-in processing failed.'); console.warn('vcSignIn processing error', e); }
@@ -264,6 +292,8 @@
         let idTok = null; try { idTok = sessionStorage.getItem('vcIdToken'); } catch(_){ }
         if(idTok){ window.__VC_ID_TOKEN = idTok; }
         if(!idTok){ showVcOverlay(true); }
+        // Enable admin mode UI
+        enableAdminMode();
         if(BACKEND){
           window.__REMOTE_MANIFEST_URL = BACKEND + '/api/list';
           window.__REMOTE_PORTFOLIO_BASE = BACKEND + '/api/download?id=';
@@ -376,6 +406,23 @@
                         const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tokenResponse.access_token } });
                         if(r.ok){ const info = await r.json(); email = (info && (info.email||'')) || ''; }
                       } catch(_) { /* non-fatal */ }
+                      
+                      // Check if this is the admin email - if so, stay on gallery in admin mode
+                      const VC_EMAIL = (window.RMU_CONFIG && window.RMU_CONFIG.VC_EMAIL) ? window.RMU_CONFIG.VC_EMAIL : 'rmuportfolioa@gmail.com';
+                      if(email && email.toLowerCase() === VC_EMAIL.toLowerCase()){
+                        // Admin user - enable VC mode and stay on gallery
+                        try{ 
+                          localStorage.setItem('vcMode','1'); 
+                          sessionStorage.setItem('vcIdToken', tokenResponse.access_token); // Store token for admin operations
+                          if(email) sessionStorage.setItem('userEmail', String(email));
+                        }catch(_){ }
+                        showWelcome(false);
+                        // Reload to activate VC mode
+                        location.reload();
+                        return;
+                      }
+                      
+                      // Regular user - redirect to portfolio
                       try{
                         sessionStorage.setItem('isUserMode','true');
                         if(email) sessionStorage.setItem('userEmail', String(email));
