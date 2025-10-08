@@ -48,6 +48,10 @@
   function setStatus(msg){ if(statusBar) statusBar.textContent = msg; }
 
   function render(){
+    if(!grid){
+      console.warn('[gallery] grid element not found; aborting render');
+      return;
+    }
     grid.classList.add('list-mode');
     grid.innerHTML = '';
     

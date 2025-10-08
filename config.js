@@ -1,5 +1,5 @@
 window.RMU_CONFIG = {
-  GOOGLE_CLIENT_ID: '738776771863-5558mme9unmotsk8bnhlrmb5sq4b2qnr.apps.googleusercontent.com',
+  GOOGLE_CLIENT_ID: '230626308317-ts08shmn77745hq81ghu5q7e2s2i0gf9.apps.googleusercontent.com',
   VC_EMAIL: 'rmuportfolioa@gmail.com',
   BACKEND_BASE: 'https://rmu-portfolio-backend-y34qi74twq-uc.a.run.app',
   // Multi-user backend configuration

@@ -319,7 +319,14 @@
               const scopes = 'https://www.googleapis.com/auth/drive.appdata profile email openid';
               let auth = gapi.auth2.getAuthInstance();
               if(!auth){ auth = await gapi.auth2.init({ client_id: window.GOOGLE_CLIENT_ID, scope: scopes }); }
-              const user = await auth.signIn({ scope: scopes });
+              let user = null;
+              try {
+                user = await auth.signIn({ scope: scopes });
+              } catch (signinErr) {
+                console.warn('gapi.auth2.signIn failed', signinErr);
+                setStuErr('Google sign-in failed. Please try again or check pop-up blockers.');
+                return;
+              }
               // Check if this is VC email
               const profile = user.getBasicProfile && user.getBasicProfile();
               const email = profile && profile.getEmail && profile.getEmail();
@@ -346,7 +353,11 @@
                 return;
               }
               setStuErr('Sign-in succeeded but no access token was obtained. Please try again.');
-            }catch(err){ setStuErr('Sign-in failed or was cancelled.'); console.warn('stuSignIn error', err); }
+            }catch(err){
+              console.warn('stuSignIn error', err);
+              const msg = (err && (err.error || err.details || err.message)) ? String(err.error || err.details || err.message) : 'Sign-in failed or was cancelled.';
+              setStuErr(msg);
+            }
           }
           
           document.addEventListener('DOMContentLoaded', ()=>{
