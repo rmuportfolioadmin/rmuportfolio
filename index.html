@@ -210,7 +210,7 @@
           if (mode === 'student-mode') { if(cssGallery) cssGallery.disabled=true; if(cssPortfolio) cssPortfolio.disabled=false; }
           if (mode === 'vc-portfolio-mode') { if(cssGallery) cssGallery.disabled=false; if(cssPortfolio) cssPortfolio.disabled=false; }
         }
-    const VC_EMAIL = 'rmuportfolioa@gmail.com';
+  const VC_EMAIL = (window.RMU_CONFIG && window.RMU_CONFIG.VC_EMAIL) ? window.RMU_CONFIG.VC_EMAIL : 'rmuportfolioa@gmail.com';
     function showVcOverlay(on){ const el = document.getElementById('vc-overlay'); if(el){ el.style.display = on?'flex':'none'; } }
     function setVcError(msg){ const e=document.getElementById('vc-error'); if(e){ e.textContent=msg||''; e.style.display = msg?'block':'none'; } }
     async function vcSignIn(){

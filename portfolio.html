@@ -827,7 +827,7 @@
 <button id="drive-selftest" onclick="app.runDriveSelfTest()" style="display:none;position:fixed;top:190px;right:10px;z-index:9999;">Test Drive Sync</button>
 <script>
 // Google Identity Services (GIS) + gapi.client integration
-const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) || window.GOOGLE_CLIENT_ID || '230626308317-ts08shmn77745hq81ghu5q7e2s2i0gf9.apps.googleusercontent.com';
+const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) || window.GOOGLE_CLIENT_ID;
 // Minimal scope: appDataFolder only (hidden per-user storage). Legacy migration handled manually via Import JSON.
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
 

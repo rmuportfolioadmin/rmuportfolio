@@ -1,7 +1,7 @@
 // auth.js - centralized Google auth helpers
 (function(){
   const cfg = (window.RMU_CONFIG || {});
-  const CLIENT_ID = cfg.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID || 'YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+  const CLIENT_ID = cfg.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID;
   const VC_EMAIL = (cfg.VC_EMAIL || 'rmuportfolioa@gmail.com').toLowerCase();
 
   // Ensure GIS script is available; if not, callers should wait.
