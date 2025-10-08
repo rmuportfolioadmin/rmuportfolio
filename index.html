@@ -6,6 +6,7 @@
   <title>Portfolio Gallery</title>
   <meta name="description" content="Gallery of medical student portfolios" />
   <link rel="icon" type="image/png" href="RMUlogo.png" />
+  <link rel="shortcut icon" href="RMUlogo.png" type="image/png" />
     <meta name="referrer" content="no-referrer" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://apis.google.com https://accounts.google.com https://cdnjs.cloudflare.com 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://apis.google.com https://accounts.google.com https://www.googleapis.com https://oauth2.googleapis.com https://*.run.app; frame-src https://accounts.google.com; base-uri 'self'; form-action 'self'; upgrade-insecure-requests" />
   <link id="css-gallery" rel="stylesheet" href="gallery.css?v=20250928.1" />
@@ -214,20 +215,38 @@
     function setVcError(msg){ const e=document.getElementById('vc-error'); if(e){ e.textContent=msg||''; e.style.display = msg?'block':'none'; } }
     async function vcSignIn(){
       try{
-        if(typeof gapi==='undefined'){ setVcError('Google API not loaded yet. Please wait 2-3 seconds and try again.'); return; }
-        await new Promise(res=> gapi.load('auth2', res));
-        let auth = gapi.auth2.getAuthInstance();
-        if(!auth){ auth = await gapi.auth2.init({ client_id: window.GOOGLE_CLIENT_ID, scope: 'profile email openid' }); }
-        const user = await auth.signIn();
-        const profile = user.getBasicProfile && user.getBasicProfile();
-        const email = profile && profile.getEmail && profile.getEmail();
-        const authResp = user && user.getAuthResponse && user.getAuthResponse();
-        const idTok = authResp && (authResp.id_token || authResp.idToken);
-        if(!email || !idTok){ setVcError('Sign-in failed. No email or ID token.'); return; }
-        if(email.toLowerCase() !== VC_EMAIL.toLowerCase()){ setVcError('This account is not authorized. Please use '+VC_EMAIL+'.'); return; }
-        try{ localStorage.setItem('vcMode','1'); sessionStorage.setItem('vcIdToken', idTok); }catch(_){ }
-        // Reload so gallery boots in VC mode; token stays in sessionStorage
-        location.reload();
+        if(!(window.google && google.accounts && google.accounts.id)){
+          setVcError('Google Sign-In not loaded yet. Please wait 2-3 seconds and try again.');
+          return;
+        }
+        // Initialize GIS ID flow to obtain an ID token (JWT) for backend verification
+        google.accounts.id.initialize({
+          client_id: window.GOOGLE_CLIENT_ID,
+          callback: (resp) => {
+            try{
+              const idTok = resp && resp.credential;
+              if(!idTok){ setVcError('Sign-in failed. No ID token received.'); return; }
+              // Decode JWT payload to read email for local allowlist check
+              const payload = (function(t){ try{ const p=t.split('.')[1]; return JSON.parse(atob(p.replace(/-/g,'+').replace(/_/g,'/'))); }catch(_){ return {}; } })(idTok);
+              const email = (payload && payload.email) ? String(payload.email) : '';
+              if(!email){ setVcError('No email found in ID token.'); return; }
+              if(email.toLowerCase() !== VC_EMAIL.toLowerCase()){ setVcError('This account is not authorized. Please use '+VC_EMAIL+'.'); return; }
+              try{ localStorage.setItem('vcMode','1'); sessionStorage.setItem('vcIdToken', idTok); }catch(_){ }
+              // Reload so gallery boots in VC mode; token stays in sessionStorage
+              location.reload();
+            }catch(e){ setVcError('Sign-in processing failed.'); console.warn('vcSignIn processing error', e); }
+          },
+          ux_mode: 'popup',
+          auto_select: false
+        });
+        // Trigger the popup prompt
+        google.accounts.id.prompt((notification)=>{
+          try{
+            if(notification && notification.isDismissedMoment && notification.isDismissedMoment()){
+              setVcError('Sign-in was dismissed. Please try again.');
+            }
+          }catch(_){ /* ignore */ }
+        });
       }catch(err){ setVcError('Sign-in was cancelled or failed.'); console.warn('vcSignIn error', err); }
     }
     document.addEventListener('DOMContentLoaded', ()=>{
