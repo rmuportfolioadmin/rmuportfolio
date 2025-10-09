@@ -40,6 +40,14 @@
   let enumAborted = false;
   let arbitraryMode = false;
 
+  // Expose APIs for other scripts (admin) to abort local enumeration and disable fallback
+  window.abortDataEnumeration = function(){
+    try { enumAborted = true; showProgress(false); console.log('[gallery] Local enumeration aborted by admin'); } catch(e){}
+  };
+  window.disableLocalFallback = function(){
+    try { ENUM_FALLBACK.enabled = false; console.log('[gallery] Local fallback enumeration disabled by admin'); } catch(e){}
+  };
+
   function escapeHtml(str){
     if(str == null) return '';
     return String(str).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]||c));
@@ -216,19 +224,45 @@
         setStatus('No index file found. Fetching from backend...');
         const t0_backend = performance.now();
 
-        // Ensure RMU_AUTH exists and get a token (authenticateUser returns {token,email,..})
+        // Ensure RMU_AUTH exists and get a token. Avoid automatically prompting users
+        // (which can trigger rate-limits). Prefer cached/silent tokens and only
+        // call the interactive authenticateUser() when the user is already signed-in.
         let token = '';
-        if(window.RMU_AUTH && typeof window.RMU_AUTH.authenticateUser === 'function'){
-          try {
-            const authResult = await window.RMU_AUTH.authenticateUser();
-            token = authResult && authResult.token ? authResult.token : '';
-          } catch(authErr){
-            // Authentication required - prompt user via UI (welcome modal handles sign-in flow)
-            setStatus('Sign in required to view Drive portfolios. Click "Sign in with Google".');
-            console.warn('Authentication required for backend manifest:', authErr && authErr.message ? authErr.message : authErr);
-            // Don't proceed to backend call without token
-            token = '';
+        try {
+          if (window.RMU_AUTH) {
+            const currentEmail = (typeof window.RMU_AUTH.getCurrentUserEmail === 'function') ? window.RMU_AUTH.getCurrentUserEmail() : '';
+            // If user already signed in (cached), try to obtain cached ID token first
+            if (currentEmail) {
+              console.log('[gallery] Detected signed-in user:', currentEmail);
+              // Try non-interactive token retrieval first (may return cached token)
+              if (typeof window.RMU_AUTH.getIdToken === 'function') {
+                try {
+                  const idTok = await window.RMU_AUTH.getIdToken();
+                  if (idTok) token = idTok;
+                } catch(e) {
+                  console.warn('[gallery] getIdToken silent attempt failed:', e && e.message ? e.message : e);
+                }
+              }
+
+              // If still no token, fall back to interactive authenticateUser once
+              if (!token && typeof window.RMU_AUTH.authenticateUser === 'function') {
+                try {
+                  const authResult = await window.RMU_AUTH.authenticateUser();
+                  token = authResult && authResult.token ? authResult.token : '';
+                } catch(authErr){
+                  console.warn('Authentication required for backend manifest:', authErr && authErr.message ? authErr.message : authErr);
+                  // Don't proceed to backend call without token
+                  token = '';
+                }
+              }
+            } else {
+              // No cached sign-in detected; don't prompt automatically. Let the welcome modal trigger sign-in.
+              console.log('[gallery] No signed-in user detected; skipping automatic auth prompt');
+              setStatus('Sign in required to view Drive portfolios. Click "Sign in with Google".');
+            }
           }
+        } catch(e){
+          console.warn('[gallery] Auth check failed:', e && e.message ? e.message : e);
         }
 
         if(token){
