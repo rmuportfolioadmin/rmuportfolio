@@ -54,6 +54,16 @@
 
   <script src="gallery.js?v=20250928.1"></script>
   <script>document.getElementById('year').textContent=new Date().getFullYear();</script>
+  <!-- Global Admin Scan Overlay -->
+  <style>
+    body.admin-loading-scan .gal-main, body.admin-loading-scan .gal-header, body.admin-loading-scan .gal-footer { filter: blur(4px) brightness(.85); pointer-events:none; }
+    #admin-global-loading { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:10050; backdrop-filter:blur(4px) saturate(1.1); background:rgba(10,20,40,.35); }
+    #admin-global-loading .agl-inner { background:#fff; border:2px solid #0a66c2; border-radius:18px; padding:28px 34px; box-shadow:0 24px 64px -12px rgba(10,70,150,.35); display:flex; flex-direction:column; align-items:center; gap:14px; }
+    .agl-spinner { width:46px; height:46px; border-radius:50%; border:5px solid #e3edf6; border-top-color:#0a66c2; animation:aglSpin 0.85s linear infinite; }
+    .agl-text { font:600 15px Inter,system-ui,sans-serif; color:#0b2340; letter-spacing:.3px; }
+    @keyframes aglSpin { to { transform:rotate(360deg);} }
+  </style>
+  <div id="admin-global-loading"><div class="agl-inner"><div class="agl-spinner"></div><div class="agl-text">Scanning portfolios...</div></div></div>
 
   <!-- VC Admin Mode Integration -->
   <style>
@@ -457,6 +467,10 @@
         let localPortfolios = [];
         let remotePortfolios = [];
         
+          // Activate global scan overlay & blur
+          try { document.body.classList.add('admin-loading-scan'); } catch(_) {}
+          const overlay = document.getElementById('admin-global-loading');
+          if(overlay) overlay.style.display = 'flex';
         // 1. First, try to load local files.json (current gallery data)
         try {
           console.log('[Admin] Loading local files.json');
@@ -464,6 +478,10 @@
           if(filesResp.ok) {
             const filesData = await filesResp.json();
             if(Array.isArray(filesData)) {
+          // Deactivate overlay & blur
+          try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
+          const overlay = document.getElementById('admin-global-loading');
+          if(overlay) overlay.style.display = 'none';
               localPortfolios = filesData.map(item => {
                 const basename = (item.file || '').replace(/^data\//, '').replace(/\.json$/i, '');
                 return {
