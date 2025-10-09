@@ -274,6 +274,9 @@
       if(elements.adminRefresh) elements.adminRefresh.style.display = 'inline-block';
       if(elements.scanToggle) elements.scanToggle.checked = false; // Disable auto scan in admin mode
       setAdminStatus('Admin');
+      // Disable local fallback enumeration immediately to avoid flooding with 404s
+      try { if(window.disableLocalFallback) window.disableLocalFallback(); } catch(_) {}
+      try { if(window.abortDataEnumeration) window.abortDataEnumeration(); } catch(_) {}
       loadAdminPortfolios();
     }
     
@@ -464,67 +467,30 @@
           setStatus('Not authenticated for admin access');
           return;
         }
-        
-        console.log('[Admin] Loading portfolios in hybrid mode (local + remote)');
+
+        console.log('[Admin] Loading portfolios in admin-only mode (Drive only)');
         setStatus('Loading portfolios...');
-        
-        let localPortfolios = [];
-        let remotePortfolios = [];
-        
-          // Activate global scan overlay & blur
-          try { document.body.classList.add('admin-loading-scan'); } catch(_) {}
-          const overlay = document.getElementById('admin-global-loading');
-          if(overlay) overlay.style.display = 'flex';
-        // 1. First, try to load local files.json (current gallery data)
-        try {
-          console.log('[Admin] Loading local files.json');
-          const filesResp = await fetch('./files.json?t=' + Date.now(), { cache: 'no-store' });
-          if(filesResp.ok) {
-            const filesData = await filesResp.json();
-            if(Array.isArray(filesData)) {
-          // Deactivate overlay & blur
-          try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
-          const overlay = document.getElementById('admin-global-loading');
-          if(overlay) overlay.style.display = 'none';
-              localPortfolios = filesData.map(item => {
-                const basename = (item.file || '').replace(/^data\//, '').replace(/\.json$/i, '');
-                return {
-                  id: `local_${item.file}`,
-                  // Keep display file as before, but also keep actual basename for search
-                  file: item.name || basename,
-                  basename,
-                  roll: extractRollFromFilename(item.file),
-                  email: '',
-                  updatedAt: 'Local File',
-                  source: 'local',
-                  localPath: item.file
-                };
-              });
-              console.log(`[Admin] Loaded ${localPortfolios.length} local portfolios`);
-            }
-          }
-        } catch(err) {
-          console.log('[Admin] files.json not available, will try data folder scan');
-        }
-        
-        // 2. If no local files.json, scan data folder directly
-        if(localPortfolios.length === 0) {
-          console.log('[Admin] Scanning data folder for JSON files');
-          localPortfolios = await scanLocalDataFolder();
-        }
-        
-        // 3. Try to load remote portfolios from backend (Google Drive)
+
+        // Activate global scan overlay & blur
+        try { document.body.classList.add('admin-loading-scan'); } catch(_) {}
+        const overlay = document.getElementById('admin-global-loading');
+        if(overlay) overlay.style.display = 'flex';
+
         const config = window.RMU_CONFIG || {};
         const backendBase = (config.BACKEND_BASE || '').replace(/\/$/, '');
-        
+
+        // When admin is signed in, do NOT attempt files.json or local data/ enumeration.
+        // Only call the backend /api/list. This avoids hundreds of 404 requests when
+        // the site is hosted without a local data folder.
+        let remotePortfolios = [];
         if(backendBase && !config.IS_LOCALHOST) {
           try {
-            console.log('[Admin] Loading portfolios from Google Drive via backend');
+            console.log('[Admin] Loading portfolios from Google Drive via backend (admin-only)');
             setStatus('Loading Drive portfolios...');
-            
+
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.API_TIMEOUT || 20000);
-            
+
             const t0_list = performance.now();
             const response = await fetch(`${backendBase}/api/list`, {
               method: 'GET',
@@ -543,46 +509,76 @@
 
             if(response.ok) {
               const backendData = await response.json();
+              // backend returns an array of items
               if(Array.isArray(backendData)) {
-                remotePortfolios = backendData.map(item => {
-                  const basename = (item.file || '').replace(/^data\//, '').replace(/\.json$/i, '');
-                  return {
-                    id: item.id || `drive_${item.file}`,
-                    file: item.file,
-                    basename,
-                    name: extractDisplayName(item.file, item.roll, item.email),
-                    roll: item.roll || '',
-                    email: item.email || '',
-                    updatedAt: item.updatedAt || 'Unknown',
-                    // Use 'remote' to align with UI logic
-                    source: 'remote',
-                    driveId: item.id
-                  };
-                });
+                remotePortfolios = backendData.map(item => ({
+                  id: item.id || `drive_${item.file}`,
+                  file: item.file,
+                  basename: (item.file || '').replace(/^data\//, '').replace(/\.json$/i, ''),
+                  name: extractDisplayName(item.file, item.roll, item.email),
+                  roll: item.roll || '',
+                  email: item.email || '',
+                  updatedAt: item.updatedAt || 'Unknown',
+                  source: 'remote',
+                  driveId: item.id
+                }));
                 console.log(`[Admin] Loaded ${remotePortfolios.length} portfolios from Google Drive`);
+              } else if (backendData && Array.isArray(backendData.manifest)) {
+                remotePortfolios = backendData.manifest.map(item => ({
+                  id: item.driveId || item.id || `drive_${item.file}`,
+                  file: item.file,
+                  basename: (item.file || '').replace(/^data\//, '').replace(/\.json$/i, ''),
+                  name: item.name || item.file,
+                  roll: item.roll || '',
+                  email: item.email || '',
+                  updatedAt: item.updatedAt || 'Unknown',
+                  source: 'remote',
+                  driveId: item.driveId || item.id
+                }));
+                console.log(`[Admin] Loaded ${remotePortfolios.length} portfolios from backend manifest`);
+              } else {
+                console.warn('[Admin] Backend returned unexpected shape for /api/list:', backendData);
               }
             } else {
-              console.log(`[Admin] Backend returned ${response.status}, using local data only`);
+              // Backend failed (403/401/500 etc.). Do not fall back to the expensive local scan when admin is signed in.
+              let bodySnippet = '';
+              try { bodySnippet = (await response.text()).slice(0,300); } catch(_){ }
+              console.warn('[Admin] Backend /api/list failed:', response.status, bodySnippet);
+              setStatus('Failed to fetch Drive portfolios. Please try again later.');
+              // Hide overlay and exit without scanning local files to avoid flooding with 404s
+              try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
+              if(overlay) overlay.style.display = 'none';
+              return;
             }
           } catch(err) {
-            console.log('[Admin] Backend unavailable for Drive access:', err.message);
+            console.log('[Admin] Backend unavailable for Drive access:', err && err.message ? err.message : err);
+            setStatus('Backend unavailable. Please check the server and try again.');
+            try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
+            if(overlay) overlay.style.display = 'none';
+            return;
           }
         } else {
-          console.log('[Admin] Backend not configured or localhost - using local data only');
+          console.log('[Admin] Backend not configured or localhost - admin requires backend access');
+          setStatus('Backend not configured. Admin features require server access.');
+          try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
+          if(overlay) overlay.style.display = 'none';
+          return;
         }
-        
-        // 4. Combine and display portfolios
-        const allPortfolios = [...localPortfolios, ...remotePortfolios];
-        
+
+        // Combine and display portfolios (remote only in admin mode)
+        const allPortfolios = [...remotePortfolios];
+        try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
+        if(overlay) overlay.style.display = 'none';
+
         if(allPortfolios.length === 0) {
-          setStatus('No portfolios found (local or remote)');
+          setStatus('No portfolios found in Drive');
           if(elements.galleryGrid) elements.galleryGrid.innerHTML = '';
           return;
         }
-        
-        console.log(`[Admin] Total portfolios: ${allPortfolios.length} (${localPortfolios.length} local, ${remotePortfolios.length} remote)`);
+
+        console.log(`[Admin] Total portfolios: ${allPortfolios.length} (remote only)`);
         displayAdminPortfolios(allPortfolios);
-        
+
       } catch(err) {
         console.error('[Admin] Load portfolios error:', err);
         setStatus('Failed to load portfolios: ' + (err.message || err));
