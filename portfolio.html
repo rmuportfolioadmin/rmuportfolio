@@ -1111,6 +1111,15 @@ function initializeGisAndGapi() {
                 }
                 window.accessToken = accessToken;
                 updateAuthUIStateGIS(true);
+                // Attempt to auto-load portfolio if Drive method available
+                setTimeout(()=>{
+                    try {
+                        if (window.app && typeof window.app.loadFromDrive === 'function') {
+                            console.log('[Auth] Auto-loading portfolio after gapi init (return visit)');
+                            window.app.loadFromDrive();
+                        }
+                    } catch(e){ console.warn('[Auth] Auto-load after init failed:', e.message); }
+                }, 400);
             }
         } catch (e) {
             console.error('gapi.client.init error', e);
