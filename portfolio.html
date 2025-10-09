@@ -1022,9 +1022,12 @@
 <button id="drive-selftest" onclick="app.runDriveSelfTest()" style="display:none;position:fixed;top:190px;right:10px;z-index:9999;">Test Drive Sync</button>
 <script>
 // Google Identity Services (GIS) + gapi.client integration
-const CLIENT_ID = '230626308317-ts08shmn77745hq81ghu5q7e2s2i0gf9.apps.googleusercontent.com';
-// Minimal scope: appDataFolder only (hidden per-user storage). Legacy migration handled manually via Import JSON.
-const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
+// Use global config to keep client and scopes consistent across the site
+const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) 
+    || (typeof window.GOOGLE_CLIENT_ID !== 'undefined' ? window.GOOGLE_CLIENT_ID : '');
+// Prefer configured scopes; fallback to minimal appDataFolder scope
+const SCOPES = (window.RMU_CONFIG && window.RMU_CONFIG.OAUTH_SCOPES) 
+    || 'https://www.googleapis.com/auth/drive.appdata';
 
 let tokenClient;
 let accessToken = null;
@@ -1034,22 +1037,11 @@ function gisHandleResponse(resp) {
 }
 
 function initializeGisAndGapi() {
-    // Check for existing user token from sessionStorage (user mode from index.html)
+    // Read any existing token set by index.html user flow
     const existingUserToken = sessionStorage.getItem('userToken');
     const isUserMode = sessionStorage.getItem('isUserMode');
-    
-    if(isUserMode === 'true' && existingUserToken) {
-        console.log('[Auth] User mode detected with existing token');
-        // Set up authentication with existing token
-        accessToken = existingUserToken;
-        gapi.client.setToken({access_token: accessToken});
-        window.accessToken = accessToken;
-        updateAuthUIStateGIS(true);
-        console.log('[Auth] User token from sessionStorage set on gapi.client');
-        return; // Don't set up interactive auth for user mode
-    }
 
-    // create the token client for interactive authentication
+    // Prepare token client for interactive auth (kept as-is)
     tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
@@ -1059,9 +1051,13 @@ function initializeGisAndGapi() {
                 return;
             }
             accessToken = tokenResponse.access_token;
-            // Initialize gapi.client with the token
-            gapi.client.setToken({access_token: accessToken});
-            console.log('Access token set on gapi.client - User authenticated with appDataFolder scope');
+            // Ensure gapi.client is initialized before setting token
+            if (window.gapi && gapi.client && typeof gapi.client.setToken === 'function') {
+                gapi.client.setToken({access_token: accessToken});
+                console.log('Access token set on gapi.client - User authenticated with appDataFolder scope');
+            } else {
+                console.warn('gapi.client not ready when token received; UI will update on poll');
+            }
             updateAuthUIStateGIS(true);
             // Persist minimal user-mode context so Drive features remain active across reloads
             try {
@@ -1069,7 +1065,7 @@ function initializeGisAndGapi() {
                 sessionStorage.setItem('isUserMode', 'true');
             } catch(e) { console.warn('Could not persist user token to sessionStorage', e); }
             
-            // Automatically load user's portfolio data from their private appDataFolder
+            // Auto-load from Drive once authenticated
             try {
                 if (window.app && typeof window.app.loadFromDrive === 'function') {
                     console.log('Auto-loading user portfolio from appDataFolder...');
@@ -1081,42 +1077,56 @@ function initializeGisAndGapi() {
         }
     });
 
-    // Attach button handlers
+    // Attach button handlers (unchanged)
     document.getElementById('authorize_button').addEventListener('click', () => {
         if (!tokenClient) { console.error('tokenClient not ready'); return; }
-        // Request an access token; this may open a popup
         tokenClient.requestAccessToken({prompt: 'consent'});
     });
 
     document.getElementById('signout_button').addEventListener('click', () => {
         if (accessToken) {
-            // Revoke token
             fetch('https://oauth2.googleapis.com/revoke?token=' + accessToken, {method: 'POST', headers: {'Content-type': 'application/x-www-form-urlencoded'}})
             .then(() => {
                 accessToken = null;
-                gapi.client.setToken({});
+                if (window.gapi && gapi.client && typeof gapi.client.setToken === 'function') {
+                    gapi.client.setToken({});
+                }
                 updateAuthUIStateGIS(false);
                 console.log('Access token revoked');
             }).catch(e => { console.error('Revoke error', e); });
         }
     });
 
-    // Also initialize gapi.client (discovery docs can be added when needed)
+    // Initialize gapi.client first, then apply any existing token
     gapi.load('client', async () => {
-        try{
+        try {
             await gapi.client.init({});
             console.log('gapi.client initialized');
-        }catch(e){ console.error('gapi.client.init error', e); }
+            if (isUserMode === 'true' && existingUserToken) {
+                console.log('[Auth] User mode detected with existing token');
+                accessToken = existingUserToken;
+                if (typeof gapi.client.setToken === 'function') {
+                    gapi.client.setToken({access_token: accessToken});
+                    console.log('[Auth] User token from sessionStorage set on gapi.client');
+                }
+                window.accessToken = accessToken;
+                updateAuthUIStateGIS(true);
+            }
+        } catch (e) {
+            console.error('gapi.client.init error', e);
+        }
     });
 
-    // Poll to update UI (in case token established by popup)
+    // Poll to update UI (in case token established by popup or set later)
     const poll = setInterval(()=>{
         try{
-            const token = gapi.client.getToken && gapi.client.getToken();
-            if (token && token.access_token) {
-                accessToken = token.access_token;
-                updateAuthUIStateGIS(true);
-                clearInterval(poll);
+            if (window.gapi && gapi.client && typeof gapi.client.getToken === 'function') {
+                const token = gapi.client.getToken();
+                if (token && token.access_token) {
+                    accessToken = token.access_token;
+                    updateAuthUIStateGIS(true);
+                    clearInterval(poll);
+                }
             }
         }catch(e){}
     }, 700);
@@ -1353,26 +1363,42 @@ window.addEventListener('load', () => {
             
             showSaveModal(true, 'Saving to server...');
             
-            // Get ID token from gapi.auth2
-            let idToken = null;
-            if(typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
+            // Acquire token for backend: prefer ID token (auth2), fallback to OAuth access token (gapi.client)
+            let bearerToken = null;
+            // Try ID token via gapi.auth2
+            if(typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance) {
                 const authInstance = gapi.auth2.getAuthInstance();
-                const user = authInstance.currentUser.get();
-                if(user && user.isSignedIn()) {
-                    const authResponse = user.getAuthResponse();
-                    idToken = authResponse.id_token || authResponse.idToken;
+                if (authInstance) {
+                    const user = authInstance.currentUser.get();
+                    if(user && user.isSignedIn && user.isSignedIn()) {
+                        const authResponse = user.getAuthResponse();
+                        bearerToken = authResponse.id_token || authResponse.idToken || null; // JWT
+                    }
                 }
             }
-            
-            if(!idToken) {
+            // Fallback: use OAuth access token already set on gapi.client
+            if(!bearerToken && typeof gapi !== 'undefined' && gapi.client && typeof gapi.client.getToken === 'function') {
+                const tok = gapi.client.getToken();
+                if (tok && tok.access_token) {
+                    bearerToken = tok.access_token; // OAuth token
+                }
+            }
+            if(!bearerToken && window.RMU_AUTH && typeof RMU_AUTH.authenticateUser === 'function') {
+                try {
+                    const res = await RMU_AUTH.authenticateUser();
+                    bearerToken = res?.token || null; // OAuth token from GIS
+                } catch(_) { /* ignore */ }
+            }
+
+            if(!bearerToken) {
                 throw new Error('Unable to obtain authentication token');
             }
-            
+
             const response = await fetch(base + '/api/save', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + idToken
+                    'Authorization': 'Bearer ' + bearerToken
                 },
                 body: JSON.stringify(payload),
                 credentials: 'omit',
