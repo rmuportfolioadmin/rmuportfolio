@@ -166,7 +166,7 @@
     // Skip index loading when admin mode is active
     try { if (document.body.classList.contains('admin-mode')) return; } catch(_) {}
     setStatus('Loading portfolio index...');
-    
+
     // Clear any previous portfolio data from memory/cache
     if(typeof localStorage !== 'undefined') {
       try {
@@ -176,9 +176,12 @@
         console.log('[gallery] Cleared localStorage cache');
       } catch(e) {}
     }
-    
+
+    let filesLoaded = false;
+
+    // 1) Try files.json first (local/static manifest)
     try{
-      // Add timestamp cache-busting to ensure fresh index data
+      const t0_files = performance.now();
       const cacheBuster = Date.now();
       const resp = await fetch(`files.json?t=${cacheBuster}`, {
         cache:'no-store',
@@ -188,45 +191,107 @@
           'Expires': '0'
         }
       });
-      if(!resp.ok) throw new Error('HTTP '+resp.status);
-      
-      const arr = await resp.json();
-      if(!Array.isArray(arr)) throw new Error('files.json malformed');
-      
-      // Process the loaded data
-      metaList = arr.map(m => ({
-        file: m.file,
-        name: m.name || m.file || 'untitled'
-      }));
-      
-      // Prepare combined search terms: name + filename
-      metaList.forEach(m => {
-        const name = (m.name||'').toLowerCase();
-        const file = (m.file||'').toLowerCase();
-        m._name = name;
-        m._terms = `${name} ${file}`.trim();
-      });
-      filtered = metaList.slice();
-      
-      // Performance feedback for large datasets  
-      if(metaList.length > 500){
-        setStatus(`Loaded ${metaList.length} portfolios. Rendering...`);
-      } else {
-        setStatus('');
+      if(resp.ok){
+        const t1_files = performance.now();
+        console.info('[gallery] files.json fetched', { status: resp.status, durationMs: Math.round(t1_files - t0_files) });
+        let arr;
+        try { arr = await resp.json(); } catch(parseErr){ console.warn('[gallery] files.json parse error', parseErr); throw parseErr; }
+        if(Array.isArray(arr)){
+          metaList = arr.map(m => ({ file: m.file, name: m.name || m.file || 'untitled' }));
+          metaList.forEach(m => { const name = (m.name||'').toLowerCase(); const file = (m.file||'').toLowerCase(); m._name = name; m._terms = `${name} ${file}`.trim(); });
+          filtered = metaList.slice();
+          if(metaList.length > 500) setStatus(`Loaded ${metaList.length} portfolios. Rendering...`); else setStatus('');
+          render();
+          filesLoaded = true;
+          if (ENUM_FALLBACK.enabled) { ENUM_FALLBACK.enabled = false; console.log('[gallery] files.json loaded successfully – fallback enumeration disabled.'); }
+        }
       }
-      
-      render();
-      // Successful load: permanently disable enumeration fallback for this session
-      if (ENUM_FALLBACK.enabled) {
-        ENUM_FALLBACK.enabled = false;
-        console.log('[gallery] files.json loaded successfully – fallback enumeration disabled.');
-      }
-      
     } catch(e){
       console.warn('files.json load failed:', e);
-      metaList = []; filtered = [];
-      render();
-      
+    }
+
+    // 2) If files.json not present, try backend /api/list (authenticated)
+    if(!filesLoaded){
+      try {
+        setStatus('No index file found. Fetching from backend...');
+        const t0_backend = performance.now();
+
+        // Ensure RMU_AUTH exists and get a token (authenticateUser returns {token,email,..})
+        let token = '';
+        if(window.RMU_AUTH && typeof window.RMU_AUTH.authenticateUser === 'function'){
+          try {
+            const authResult = await window.RMU_AUTH.authenticateUser();
+            token = authResult && authResult.token ? authResult.token : '';
+          } catch(authErr){
+            // Authentication required - prompt user via UI (welcome modal handles sign-in flow)
+            setStatus('Sign in required to view Drive portfolios. Click "Sign in with Google".');
+            console.warn('Authentication required for backend manifest:', authErr && authErr.message ? authErr.message : authErr);
+            // Don't proceed to backend call without token
+            token = '';
+          }
+        }
+
+        if(token){
+          const backendUrl = (window.RMU_CONFIG && window.RMU_CONFIG.BACKEND_BASE) ? window.RMU_CONFIG.BACKEND_BASE.replace(/\/$/, '') : '';
+          if(backendUrl){
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), (window.RMU_CONFIG && window.RMU_CONFIG.API_TIMEOUT) || 30000);
+            const resp = await fetch(`${backendUrl}/api/list`, {
+              method: 'GET',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+              credentials: 'omit',
+              cache: 'no-store',
+              signal: controller.signal
+            });
+            clearTimeout(timeout);
+            const t1_backend = performance.now();
+            console.info('[gallery] /api/list response', { status: resp.status, durationMs: Math.round(t1_backend - t0_backend) });
+            if(resp.ok){
+              // backend may return { manifest: [...] } or an array directly; handle both
+              let dataText = null;
+              let data = null;
+              try {
+                dataText = await resp.text();
+                try { data = JSON.parse(dataText); } catch(e){ /* leave as null */ }
+              } catch(e){ console.warn('[gallery] Failed to read backend body', e); }
+              // If backend returned an array directly, normalize
+              if(Array.isArray(data)) data = { manifest: data };
+              if(data && Array.isArray(data.manifest)){
+                metaList = data.manifest.map(m => ({ file: m.file, name: m.name || m.file || 'untitled' }));
+                metaList.forEach(m => { const name = (m.name||'').toLowerCase(); const file = (m.file||'').toLowerCase(); m._name = name; m._terms = `${name} ${file}`.trim(); });
+                filtered = metaList.slice();
+                setStatus(`Loaded ${metaList.length} portfolios from Drive.`);
+                render();
+                filesLoaded = true;
+                console.debug('[gallery] backend manifest sample', metaList.slice(0,5));
+              } else {
+                console.warn('Backend returned no manifest or unexpected shape', { parsed: data, raw: (dataText || '').slice(0,200) });
+                setStatus('No portfolios found in Drive.');
+              }
+            } else {
+              // Backend returned non-OK (likely 401/403) - show sign-in message
+              if(resp.status === 401 || resp.status === 403){
+                setStatus('Sign in required to access Drive portfolios.');
+              } else {
+                setStatus('Failed to fetch portfolios from backend.');
+              }
+              let bodySnippet = '';
+              try { bodySnippet = (await resp.text()).slice(0,300); } catch(_){}
+              console.warn('Backend /api/list responded', resp.status, resp.statusText, bodySnippet);
+            }
+          } else {
+            console.warn('Backend URL not configured in RMU_CONFIG.BACKEND_BASE');
+            setStatus('Backend not configured.');
+          }
+        }
+      } catch(e){
+        console.warn('Backend fetch error:', e);
+        setStatus('Error fetching portfolios from backend.');
+      }
+    }
+
+    // 3) If still not loaded, fallback to local /data enumeration
+    if(!filesLoaded){
       if(ENUM_FALLBACK.enabled){
         scheduleEnumerationFallback();
       } else {
