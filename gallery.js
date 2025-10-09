@@ -85,7 +85,7 @@
         const a = document.createElement('a');
         // Add timestamp to force fresh loading and prevent cache
         const timestamp = Date.now();
-        a.href = `portfolio.html?file=${encodeURIComponent(m.file)}&t=${timestamp}`;
+    a.href = `portfolio.html?file=${encodeURIComponent(m.file || '')}&t=${timestamp}`;
         a.className = 'gal-row';
         a.setAttribute('role','listitem');
         a.setAttribute('data-name', (m.name||'').toLowerCase());
@@ -95,7 +95,8 @@
         left.className = 'row-left';
         const fileEl = document.createElement('div');
         fileEl.className = 'row-file';
-        fileEl.textContent = m.file.replace(/^data\//,'');  // Show filename only
+    // Safely show filename only; guard against undefined
+    fileEl.textContent = (m.file || '').replace(/^data\//,'');
         const nameEl = document.createElement('div');
         nameEl.className = 'row-name';
         nameEl.textContent = m.name || 'untitled';  // Show filename as name
@@ -292,7 +293,13 @@
               if(Array.isArray(data)) data = { manifest: data };
               if(data && Array.isArray(data.manifest)){
                 metaList = data.manifest.map(m => ({ file: m.file, name: m.name || m.file || 'untitled' }));
-                metaList.forEach(m => { const name = (m.name||'').toLowerCase(); const file = (m.file||'').toLowerCase(); m._name = name; m._terms = `${name} ${file}`.trim(); });
+                  // Normalize manifest entries defensively: ensure file and name are strings
+                  metaList = data.manifest.map(m => {
+                    const file = (m && typeof m.file === 'string' && m.file) ? m.file : (m && m.driveId ? `drive-${m.driveId}.json` : '');
+                    const name = (m && (m.name || m.file)) ? (m.name || m.file) : 'untitled';
+                    return { file, name };
+                  }).filter(x => x.file !== '');
+                  metaList.forEach(m => { const name = (m.name||'').toLowerCase(); const file = (m.file||'').toLowerCase(); m._name = name; m._terms = `${name} ${file}`.trim(); });
                 filtered = metaList.slice();
                 setStatus(`Loaded ${metaList.length} portfolios from Drive.`);
                 render();
