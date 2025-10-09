@@ -35,3 +35,6 @@ if(window.RMU_CONFIG.DEBUG_MODE) {
   console.log('[Config] Backend:', window.RMU_CONFIG.BACKEND_BASE);
   console.log('[Config] OAuth Client:', window.RMU_CONFIG.GOOGLE_CLIENT_ID ? 'Configured' : 'Missing');
 }
+
+// Signal to any listeners that configuration is ready (portfolio.html GIS code can defer until this fires)
+try { document.dispatchEvent(new Event('rmu-config-ready')); } catch(_) {}
