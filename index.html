@@ -418,34 +418,38 @@
       }
       
       try {
-        console.log('[VC] Requesting backend to scan Drive and generate files.json');
-        setStatus('Backend scanning Google Drive...');
-        
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-        
-        const response = await fetch(`${backendBase}/api/generate-manifest`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          credentials: 'omit',
-          cache: 'no-store',
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeout);
-        
-        if (response.ok) {
-          const result = await response.json();
-          console.log('[VC] Backend manifest generation result:', result);
-          setStatus(`Found ${result.count || 0} portfolios in Drive`);
-        } else {
-          const errorText = await response.text().catch(() => response.statusText);
-          console.warn('[VC] Backend manifest generation failed:', errorText);
-          setStatus('Drive scan completed with warnings');
-        }
+          console.log('[VC] Requesting backend to scan Drive and generate files.json');
+          setStatus('Backend scanning Google Drive...');
+
+          const t0_gen = performance.now();
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+          const response = await fetch(`${backendBase}/api/generate-manifest`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            credentials: 'omit',
+            cache: 'no-store',
+            signal: controller.signal
+          });
+
+          clearTimeout(timeout);
+          const t1_gen = performance.now();
+          console.info('[VC] /api/generate-manifest response', { status: response.status, durationMs: Math.round(t1_gen - t0_gen) });
+
+          if (response.ok) {
+            let body = null;
+            try { body = await response.json(); } catch(e) { body = await response.text().catch(()=>null); }
+            console.log('[VC] Backend manifest generation result:', body);
+            setStatus(`Found ${body?.count || 0} portfolios in Drive`);
+          } else {
+            const errorText = await response.text().catch(() => response.statusText);
+            console.warn('[VC] Backend manifest generation failed:', errorText);
+            setStatus('Drive scan completed with warnings');
+          }
         
       } catch (err) {
         console.error('[VC] Backend initialization error:', err);
@@ -521,6 +525,7 @@
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.API_TIMEOUT || 20000);
             
+            const t0_list = performance.now();
             const response = await fetch(`${backendBase}/api/list`, {
               method: 'GET',
               headers: {
@@ -531,9 +536,11 @@
               cache: 'no-store',
               signal: controller.signal
             });
-            
+
             clearTimeout(timeout);
-            
+            const t1_list = performance.now();
+            console.info('[Admin] /api/list response', { status: response.status, durationMs: Math.round(t1_list - t0_list) });
+
             if(response.ok) {
               const backendData = await response.json();
               if(Array.isArray(backendData)) {
