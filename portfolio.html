@@ -1042,6 +1042,12 @@ function initializeGisAndGapi() {
     const SCOPES = (window.RMU_CONFIG && window.RMU_CONFIG.OAUTH_SCOPES) 
         || 'https://www.googleapis.com/auth/drive.appdata';
 
+    // Small masked debug log to confirm the client id was resolved at init time
+    try {
+        const masked = CLIENT_ID ? CLIENT_ID.replace(/(.{6}).+(.{6})/, '$1…$2') : '(missing)';
+        console.info('[GIS] Resolved CLIENT_ID:', masked);
+    } catch (e) { /* non-blocking */ }
+
     // Read any existing token set by index.html user flow
     const existingUserToken = sessionStorage.getItem('userToken');
     const isUserMode = sessionStorage.getItem('isUserMode');
