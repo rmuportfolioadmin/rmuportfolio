@@ -2,6 +2,10 @@ window.RMU_CONFIG = {
   GOOGLE_CLIENT_ID: '738776771863-5558mme9unmotsk8bnhlrmb5sq4b2qnr.apps.googleusercontent.com',
   VC_EMAIL: 'rmuportfolioa@gmail.com',
   BACKEND_BASE: 'https://rmu-portfolio-backend-738776771863.us-central1.run.app',
+  // Recommended Drive parent folder ID used by the backend. Kept here for developer convenience only.
+  // The canonical/production value is set on the Cloud Run service via the DRIVE_PARENT_FOLDER_ID env var.
+  DRIVE_PARENT_FOLDER_ID: '1mhOmMsq913sNiHbRc2xr7R4eBbQlryMa',
+  ADMIN_EMAIL: 'rmuportfolioa@gmail.com',
   // Portfolio data location (root of repository)
   PORTFOLIO_DATA_URL: './portfolio-data.json',
   
