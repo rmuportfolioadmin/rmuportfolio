@@ -42,6 +42,18 @@
         const userMode = getParam('user');
         const driveMode = getParam('drive');
         const adminMode = getParam('admin');
+
+        // Global view mode: 'admin' | 'user' | 'public'
+        // Set early so subsequent logic can opt-out of user-only behavior when admin view is requested.
+        if (adminMode) {
+            window.__VIEW_MODE = 'admin';
+        } else if (userMode) {
+            window.__VIEW_MODE = 'user';
+        } else if (welcomeMode) {
+            window.__VIEW_MODE = 'user'; // welcome mode behaves like user-mode UI (no gallery nav)
+        } else {
+            window.__VIEW_MODE = 'public';
+        }
         
         // Hide gallery button for non-admin authenticated users or welcome mode
         if(welcomeMode || (userMode && !adminMode)) {
@@ -186,6 +198,9 @@
                 }
                 
                 // Handle admin portfolio data loading
+                // Mark view as admin to prevent any user-mode Drive/UI behavior from triggering
+                try { window.__VIEW_MODE = 'admin'; document.body.classList.add('admin-view'); } catch(_){}
+
                 if(window.app && typeof window.app.normalizeLoadedData === 'function') {
                     const normalized = window.app.normalizeLoadedData(event.data.data);
                     window.app.loadDataDirectly(normalized);
@@ -207,6 +222,11 @@
         // Check for user data from sessionStorage (when navigated from index.html)
         function checkUserMode() {
             try {
+                // If admin view requested, skip any user-mode session checks entirely.
+                if (window.__VIEW_MODE === 'admin') {
+                    console.log('[Portfolio] Admin view active - skipping user-mode auth/session checks');
+                    return;
+                }
                 const isUserMode = sessionStorage.getItem('isUserMode');
                 const userToken = sessionStorage.getItem('userToken');
                 const userEmail = sessionStorage.getItem('userEmail');
@@ -239,7 +259,8 @@
                     
                     // Enable user authentication UI
                     document.body.classList.add('user-authenticated');
-                    document.body.classList.add('signed-in'); // Show save-to-server and other auth-required buttons
+                    // Only show signed-in UI for non-admin views
+                    if (window.__VIEW_MODE !== 'admin') document.body.classList.add('signed-in'); // Show save-to-server and other auth-required buttons
                     
                     // Clean up sessionStorage to prevent conflicts
                     try {
@@ -1087,124 +1108,137 @@ function gisHandleResponse(resp) {
 
 function initializeGisAndGapi() {
     // Read client ID and scopes at the time of initialization (defer-safe)
-    const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) 
+    const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID)
         || (typeof window.GOOGLE_CLIENT_ID !== 'undefined' ? window.GOOGLE_CLIENT_ID : '');
-    // Prefer configured scopes; fallback to minimal appDataFolder scope
-    const SCOPES = (window.RMU_CONFIG && window.RMU_CONFIG.OAUTH_SCOPES) 
+    const SCOPES = (window.RMU_CONFIG && window.RMU_CONFIG.OAUTH_SCOPES)
         || 'https://www.googleapis.com/auth/drive.appdata';
 
-    // Small masked debug log to confirm the client id was resolved at init time
     try {
         const masked = CLIENT_ID ? CLIENT_ID.replace(/(.{6}).+(.{6})/, '$1…$2') : '(missing)';
         console.info('[GIS] Resolved CLIENT_ID:', masked);
     } catch (e) { /* non-blocking */ }
 
-    // Read any existing token set by index.html user flow
     const existingUserToken = sessionStorage.getItem('userToken');
     const isUserMode = sessionStorage.getItem('isUserMode');
 
-    // Prepare token client for interactive auth (kept as-is)
-    if (!CLIENT_ID) {
-        console.error('[GIS] CLIENT_ID missing. Google auth will be disabled. Set RMU_CONFIG.GOOGLE_CLIENT_ID');
-        // Hide auth UI to avoid broken flows
-        try { document.getElementById('authorize_button').style.display = 'none'; } catch(e){}
+    // If admin view is active, avoid registering any interactive Drive UI
+    if (window.__VIEW_MODE === 'admin') {
+        console.log('[GIS] Admin view detected - skipping GIS token client initialization');
+        try { document.getElementById('authorize_button').style.display = 'none'; } catch (e) { }
+        // still initialize a minimal poll so any later attempts are harmless
     } else {
-        tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: CLIENT_ID,
-            scope: SCOPES,
-        callback: async (tokenResponse) => {
-            if (tokenResponse.error) {
-                console.error('Token error', tokenResponse);
-                return;
-            }
-            accessToken = tokenResponse.access_token;
-            // Ensure gapi.client is initialized before setting token
-            if (window.gapi && gapi.client && typeof gapi.client.setToken === 'function') {
-                gapi.client.setToken({access_token: accessToken});
-                console.log('Access token set on gapi.client - User authenticated with appDataFolder scope');
-            } else {
-                console.warn('gapi.client not ready when token received; UI will update on poll');
-            }
-            updateAuthUIStateGIS(true);
-            // Persist minimal user-mode context so Drive features remain active across reloads
+        // If no client id is configured, hide auth UI and do not create token client
+        if (!CLIENT_ID) {
+            console.error('[GIS] CLIENT_ID missing. Google auth will be disabled. Set RMU_CONFIG.GOOGLE_CLIENT_ID');
+            try { document.getElementById('authorize_button').style.display = 'none'; } catch (e) { }
+        } else {
+            // Create the GIS token client for user interactive sign-in
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: async (tokenResponse) => {
+                    if (tokenResponse.error) {
+                        console.error('Token error', tokenResponse);
+                        return;
+                    }
+                    accessToken = tokenResponse.access_token;
+                    // Apply token to gapi.client if ready
+                    if (window.gapi && gapi.client && typeof gapi.client.setToken === 'function') {
+                        gapi.client.setToken({ access_token: accessToken });
+                        console.log('[GIS] Access token set on gapi.client');
+                    } else {
+                        console.warn('[GIS] gapi.client not ready when token received');
+                    }
+
+                    if (window.__VIEW_MODE !== 'admin') updateAuthUIStateGIS(true);
+                    try {
+                        sessionStorage.setItem('userToken', accessToken);
+                        sessionStorage.setItem('isUserMode', 'true');
+                    } catch (e) { console.warn('[GIS] Could not persist token', e); }
+
+                    // Attempt auto-load (user mode only)
+                    try {
+                        if (window.__VIEW_MODE !== 'admin' && window.app && typeof window.app.loadFromDrive === 'function') {
+                            console.log('[GIS] Auto-loading user portfolio from appDataFolder...');
+                            await window.app.loadFromDrive();
+                        }
+                    } catch (e) {
+                        console.warn('[GIS] Auto-load on sign-in failed:', e);
+                    }
+                }
+            });
+
+            // Hook the authorize button to request token interactively
             try {
-                sessionStorage.setItem('userToken', accessToken);
-                sessionStorage.setItem('isUserMode', 'true');
-            } catch(e) { console.warn('Could not persist user token to sessionStorage', e); }
-            
-            // Auto-load from Drive once authenticated
+                document.getElementById('authorize_button').addEventListener('click', () => {
+                    if (!tokenClient) { console.error('tokenClient not ready'); return; }
+                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                });
+            } catch (e) { /* ignore missing UI in some embed scenarios */ }
+        }
+    }
+
+    // Sign-out handler (works regardless of admin/user mode; will be no-op if no token)
+    try {
+        document.getElementById('signout_button').addEventListener('click', () => {
+            if (accessToken) {
+                fetch('https://oauth2.googleapis.com/revoke?token=' + accessToken, { method: 'POST', headers: { 'Content-type': 'application/x-www-form-urlencoded' } })
+                    .then(() => {
+                        accessToken = null;
+                        if (window.gapi && gapi.client && typeof gapi.client.setToken === 'function') {
+                            gapi.client.setToken({});
+                        }
+                        updateAuthUIStateGIS(false);
+                        console.log('Access token revoked');
+                    }).catch(e => { console.error('Revoke error', e); });
+            }
+        });
+    } catch (e) { /* ignore missing UI */ }
+
+    // Initialize gapi.client and apply any existing token for returning users
+    try {
+        gapi.load('client', async () => {
             try {
-                if (window.app && typeof window.app.loadFromDrive === 'function') {
-                    console.log('Auto-loading user portfolio from appDataFolder...');
-                    await window.app.loadFromDrive();
+                await gapi.client.init({});
+                console.log('gapi.client initialized');
+
+                if (window.__VIEW_MODE !== 'admin' && isUserMode === 'true' && existingUserToken) {
+                    console.log('[Auth] User mode detected with existing token');
+                    accessToken = existingUserToken;
+                    if (typeof gapi.client.setToken === 'function') {
+                        gapi.client.setToken({ access_token: accessToken });
+                        console.log('[Auth] User token from sessionStorage set on gapi.client');
+                    }
+                    window.accessToken = accessToken;
+                    if (window.__VIEW_MODE !== 'admin') updateAuthUIStateGIS(true);
+
+                    setTimeout(() => {
+                        try {
+                            if (window.__VIEW_MODE !== 'admin' && window.app && typeof window.app.loadFromDrive === 'function') {
+                                console.log('[Auth] Auto-loading portfolio after gapi init (return visit)');
+                                window.app.loadFromDrive();
+                            }
+                        } catch (e) { console.warn('[Auth] Auto-load after init failed:', e && e.message); }
+                    }, 400);
                 }
             } catch (e) {
-                console.warn('Failed to auto-load portfolio on sign-in:', e);
+                console.error('gapi.client.init error', e);
             }
-        }
-    });
-    }
-    // Attach button handlers (unchanged)
-    document.getElementById('authorize_button').addEventListener('click', () => {
-        if (!tokenClient) { console.error('tokenClient not ready (CLIENT_ID missing or GIS not loaded)'); return; }
-        tokenClient.requestAccessToken({prompt: 'consent'});
-    });
+        });
+    } catch (e) { console.warn('[GIS] gapi.load failed', e); }
 
-    document.getElementById('signout_button').addEventListener('click', () => {
-        if (accessToken) {
-            fetch('https://oauth2.googleapis.com/revoke?token=' + accessToken, {method: 'POST', headers: {'Content-type': 'application/x-www-form-urlencoded'}})
-            .then(() => {
-                accessToken = null;
-                if (window.gapi && gapi.client && typeof gapi.client.setToken === 'function') {
-                    gapi.client.setToken({});
-                }
-                updateAuthUIStateGIS(false);
-                console.log('Access token revoked');
-            }).catch(e => { console.error('Revoke error', e); });
-        }
-    });
-
-    // Initialize gapi.client first, then apply any existing token
-    gapi.load('client', async () => {
+    // Poll to detect tokens set by other flows and update UI accordingly
+    const poll = setInterval(() => {
         try {
-            await gapi.client.init({});
-            console.log('gapi.client initialized');
-            if (isUserMode === 'true' && existingUserToken) {
-                console.log('[Auth] User mode detected with existing token');
-                accessToken = existingUserToken;
-                if (typeof gapi.client.setToken === 'function') {
-                    gapi.client.setToken({access_token: accessToken});
-                    console.log('[Auth] User token from sessionStorage set on gapi.client');
-                }
-                window.accessToken = accessToken;
-                updateAuthUIStateGIS(true);
-                // Attempt to auto-load portfolio if Drive method available
-                setTimeout(()=>{
-                    try {
-                        if (window.app && typeof window.app.loadFromDrive === 'function') {
-                            console.log('[Auth] Auto-loading portfolio after gapi init (return visit)');
-                            window.app.loadFromDrive();
-                        }
-                    } catch(e){ console.warn('[Auth] Auto-load after init failed:', e.message); }
-                }, 400);
-            }
-        } catch (e) {
-            console.error('gapi.client.init error', e);
-        }
-    });
-
-    // Poll to update UI (in case token established by popup or set later)
-    const poll = setInterval(()=>{
-        try{
             if (window.gapi && gapi.client && typeof gapi.client.getToken === 'function') {
                 const token = gapi.client.getToken();
                 if (token && token.access_token) {
                     accessToken = token.access_token;
-                    updateAuthUIStateGIS(true);
+                    if (window.__VIEW_MODE !== 'admin') updateAuthUIStateGIS(true);
                     clearInterval(poll);
                 }
             }
-        }catch(e){}
+        } catch (e) { }
     }, 700);
 }
 
@@ -1218,6 +1252,12 @@ function updateAuthUIStateGIS(signedIn) {
     const importBtn = document.getElementById('import-json');
     const importInput = document.getElementById('import-json-input');
     const selftestBtn = document.getElementById('drive-selftest');
+    // Never reveal Drive/auth UI when in admin view
+    if (window.__VIEW_MODE === 'admin') {
+        console.log('[AuthUI] Admin view - suppressing Drive UI update');
+        return;
+    }
+
     if (signedIn) {
         if (statusDiv) { statusDiv.innerText = 'Signed in (Drive access granted)'; statusDiv.style.display = 'block'; }
         if (authBtn) { authBtn.style.display = 'none'; }
@@ -1581,6 +1621,11 @@ window.addEventListener('load', () => {
     
     // Listen for auth state changes
     document.addEventListener('auth-state-changed', (e) => {
+        // Ignore auth-state changes while in admin view to prevent Drive UI leakage
+        if (window.__VIEW_MODE === 'admin') {
+            console.log('[AuthEvent] Ignoring auth-state-changed in admin view');
+            return;
+        }
         const signedIn = !!(e.detail && e.detail.signedIn);
         if(signedIn) {
             document.body.classList.add('signed-in');
