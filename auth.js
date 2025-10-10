@@ -99,6 +99,11 @@
   function setCurrentUserEmail(email) {
     currentUserEmail = email ? email.toLowerCase() : '';
     console.log('[Auth] Set current user email:', currentUserEmail);
+    try {
+      // Notify listeners in the UI about auth state changes so they can
+      // reveal/hide auth-dependent controls (Drive buttons, save-to-server, etc.)
+      document.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { signedIn: !!currentUserEmail, email: currentUserEmail } }));
+    } catch (e) { /* non-blocking */ }
   }
 
   function isAdmin(){
@@ -155,13 +160,24 @@
               clearTimeout(timeout);
               
               if (userInfoResponse.ok) {
-                const userInfo = await userInfoResponse.json();
-                setCurrentUserEmail(userInfo.email);
-                console.log('[Auth] User authenticated:', userInfo.email);
-                resolve({ token: tokenResponse.access_token, email: userInfo.email, userInfo });
-              } else {
-                reject(new Error(`Failed to get user info: ${userInfoResponse.status}`));
-              }
+                  const userInfo = await userInfoResponse.json();
+                  setCurrentUserEmail(userInfo.email);
+                  // Persist sessionStorage so other parts of the app detect user-mode
+                  try {
+                    sessionStorage.setItem('userToken', tokenResponse.access_token);
+                    sessionStorage.setItem('isUserMode', 'true');
+                    sessionStorage.setItem('userEmail', userInfo.email);
+                    // Mask token when logging to avoid exposing secrets in console
+                    try {
+                      const masked = tokenResponse.access_token ? tokenResponse.access_token.replace(/(.{6}).+(.{6})/, '$1…$2') : '(none)';
+                      console.debug('[Auth] sessionStorage persisted:', { userToken: masked, isUserMode: 'true', userEmail: userInfo.email });
+                    } catch(_){ console.debug('[Auth] sessionStorage persisted (no mask) for userEmail:', userInfo.email); }
+                  } catch(_) {}
+                  console.log('[Auth] User authenticated:', userInfo.email);
+                  resolve({ token: tokenResponse.access_token, email: userInfo.email, userInfo });
+                } else {
+                  reject(new Error(`Failed to get user info: ${userInfoResponse.status}`));
+                }
             } catch (err) {
               console.error('[Auth] User info fetch error:', err);
               reject(new Error(`User info fetch failed: ${err.message}`));
