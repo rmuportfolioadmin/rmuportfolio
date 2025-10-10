@@ -216,8 +216,12 @@
                     console.log('[Portfolio] User mode detected:', userEmail);
                     
                     // Store user credentials globally for Drive operations
-                    window.__USER_EMAIL = userEmail;
-                    window.__USER_TOKEN = userToken;
+                        window.__USER_EMAIL = userEmail;
+                        window.__USER_TOKEN = userToken;
+                        // Also inform the RMU_AUTH wrapper about the current user so
+                        // periodic sign-in checks honor the signed-in state and UI
+                        // buttons remain visible.
+                        try { if (window.RMU_AUTH && typeof RMU_AUTH.setCurrentUserEmail === 'function') RMU_AUTH.setCurrentUserEmail(userEmail); } catch(_) {}
                     window.__IS_USER_MODE = true;
                     
                     // Authentication will be set up by initializeGisAndGapi when gapi loads
@@ -286,7 +290,35 @@
         }
         
         // AGGRESSIVE CACHE CLEARING - Ensure no previous portfolio data remains
+        // Preserve sessionStorage user-mode data if present (so Drive-loaded
+        // user data isn't wiped when navigating from the gallery). If the
+        // user has signed in and we have 'userPortfolioData', prefer it over
+        // fetching a local ?file and skip the fetch entirely.
         try {
+            // Detect preserved user-mode payload
+            const preservedIsUserMode = sessionStorage.getItem('isUserMode') === 'true';
+            const preservedUserData = sessionStorage.getItem('userPortfolioData');
+            const preservedUserEmail = sessionStorage.getItem('userEmail');
+
+            if (preservedIsUserMode && preservedUserData) {
+                console.log('[portfolio-loader] Detected user-mode portfolio in sessionStorage - preserving and using it instead of fetching ?file');
+                try {
+                    // Restore minimal globals for adoption flow
+                    window.__PRELOADED_PORTFOLIO_DATA = JSON.parse(preservedUserData);
+                } catch (e) {
+                    console.warn('[portfolio-loader] Failed to parse preserved user portfolio data:', e);
+                    // Fall back to clearing storage below
+                }
+                // Do not clear sessionStorage (preserve auth context), but clear localStorage to avoid UI contamination
+                try { localStorage.clear(); } catch(_) {}
+                // Signal that data is ready so adoption logic can pick it up
+                window.dispatchEvent(new CustomEvent('portfolio_data_ready'));
+                console.log('[portfolio-loader] Dispatched portfolio_data_ready for preserved user data');
+                // Skip the aggressive fetch path - return early from this loader
+                return;
+            }
+
+            // No user-mode data to preserve: clear everything as before
             localStorage.clear();
             sessionStorage.clear();
             delete window.__PRELOADED_PORTFOLIO_DATA;
