@@ -1042,9 +1042,14 @@ function initializeGisAndGapi() {
     const isUserMode = sessionStorage.getItem('isUserMode');
 
     // Prepare token client for interactive auth (kept as-is)
-    tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
+    if (!CLIENT_ID) {
+        console.error('[GIS] CLIENT_ID missing. Google auth will be disabled. Set RMU_CONFIG.GOOGLE_CLIENT_ID');
+        // Hide auth UI to avoid broken flows
+        try { document.getElementById('authorize_button').style.display = 'none'; } catch(e){}
+    } else {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: CLIENT_ID,
+            scope: SCOPES,
         callback: async (tokenResponse) => {
             if (tokenResponse.error) {
                 console.error('Token error', tokenResponse);
@@ -1076,10 +1081,10 @@ function initializeGisAndGapi() {
             }
         }
     });
-
+    }
     // Attach button handlers (unchanged)
     document.getElementById('authorize_button').addEventListener('click', () => {
-        if (!tokenClient) { console.error('tokenClient not ready'); return; }
+        if (!tokenClient) { console.error('tokenClient not ready (CLIENT_ID missing or GIS not loaded)'); return; }
         tokenClient.requestAccessToken({prompt: 'consent'});
     });
 
