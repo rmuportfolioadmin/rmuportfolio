@@ -1203,13 +1203,38 @@ function updateAuthUIStateGIS(signedIn) {
 // Initialize when GIS script is ready
 window.addEventListener('load', () => {
     console.log('window.load: waiting for GIS and gapi');
-    const check = setInterval(()=>{
-        if (window.google && google.accounts && window.gapi) {
-            console.log('GIS and gapi detected, initializing');
-            clearInterval(check);
-            initializeGisAndGapi();
-        }
-    }, 300);
+    // Ensure RMU_CONFIG is available before attempting to initialize GIS.
+    // Prefer the 'rmu-config-ready' event (dispatched by config.js) but fall
+    // back to a short timeout to avoid blocking in unusual deploys.
+    const WAIT_CONFIG_TIMEOUT = 1200; // ms
+    let configReady = !!(window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID);
+
+    const startInitLoop = () => {
+        const check = setInterval(()=>{
+            if (window.google && google.accounts && window.gapi) {
+                console.log('GIS and gapi detected, initializing');
+                clearInterval(check);
+                initializeGisAndGapi();
+            }
+        }, 300);
+    };
+
+    if (configReady) {
+        startInitLoop();
+    } else {
+        // Wait for config.js to dispatch readiness; fallback after timeout
+        let fallback = setTimeout(()=>{
+            console.warn('[Init] rmu-config-ready not received in time - continuing initialization attempt');
+            configReady = true;
+            startInitLoop();
+        }, WAIT_CONFIG_TIMEOUT);
+
+        document.addEventListener('rmu-config-ready', () => {
+            try { clearTimeout(fallback); } catch(_){}
+            configReady = true;
+            startInitLoop();
+        }, { once: true });
+    }
 });
 </script>
 
