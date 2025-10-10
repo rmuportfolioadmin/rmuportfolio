@@ -185,7 +185,8 @@
     getCurrentUserEmail, 
     setCurrentUserEmail,
     authenticateUser,
-    CLIENT_ID, 
+    // Expose the resolved client id value (read at export time) for compatibility
+    CLIENT_ID: getClientId(),
     VC_EMAIL 
   };
   
