@@ -32,26 +32,35 @@
     
     try {
       // Use the credential response approach
+      if (!CLIENT_ID || CLIENT_ID.indexOf('YOUR_OAUTH_CLIENT_ID') === 0) {
+        throw new Error('CLIENT_ID not configured. Set RMU_CONFIG.GOOGLE_CLIENT_ID or GOOGLE_CLIENT_ID');
+      }
+
       return new Promise((resolve, reject)=>{
-        google.accounts.id.initialize({ 
-          client_id: CLIENT_ID, 
-          callback: (resp)=>{
-            if(resp && resp.credential) {
-              currentToken = resp.credential;
-              console.log('[Auth] Got credential token from GIS');
-              return resolve(resp.credential);
+        try {
+          google.accounts.id.initialize({ 
+            client_id: CLIENT_ID, 
+            callback: (resp)=>{
+              if(resp && resp.credential) {
+                currentToken = resp.credential;
+                console.log('[Auth] Got credential token from GIS');
+                return resolve(resp.credential);
+              }
+              reject(new Error('No credential from Google Identity Services'));
             }
-            reject(new Error('No credential from Google Identity Services'));
-          }
-        });
-        
-        // Try to get credential silently first
-        google.accounts.id.prompt((notification) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            console.log('[Auth] Silent credential request failed, user interaction required');
-            reject(new Error('User interaction required for authentication'));
-          }
-        });
+          });
+          
+          // Try to get credential silently first
+          google.accounts.id.prompt((notification) => {
+            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+              console.log('[Auth] Silent credential request failed, user interaction required');
+              reject(new Error('User interaction required for authentication'));
+            }
+          });
+        } catch (e) {
+          console.error('[Auth] GIS initialization failed', e);
+          reject(e);
+        }
       });
     } catch (e) { 
       console.error('[Auth] ID token error:', e);
@@ -94,6 +103,9 @@
 
   // Modern authentication method using Google Identity Services with rate limiting
   async function authenticateUser() {
+    if (!CLIENT_ID || CLIENT_ID.indexOf('YOUR_OAUTH_CLIENT_ID') === 0) {
+      throw new Error('CLIENT_ID not configured. Cannot authenticate.');
+    }
     if (!shouldAllowAuthCall()) {
       console.log('[Auth] Rate limited - authentication call too frequent');
       throw new Error('Authentication rate limited. Please wait before trying again.');
@@ -105,6 +117,10 @@
       await _ensureGisReady();
       
       return new Promise((resolve, reject) => {
+        if (!CLIENT_ID) {
+          console.error('[Auth] CLIENT_ID missing - cannot initialize token client');
+          return reject(new Error('CLIENT_ID missing'));
+        }
         const tokenClient = google.accounts.oauth2.initTokenClient({
           client_id: CLIENT_ID,
           scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
