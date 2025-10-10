@@ -1022,13 +1022,11 @@
 <button id="drive-selftest" onclick="app.runDriveSelfTest()" style="display:none;position:fixed;top:190px;right:10px;z-index:9999;">Test Drive Sync</button>
 <script>
 // Google Identity Services (GIS) + gapi.client integration
-// Use global config to keep client and scopes consistent across the site
-const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) 
-    || (typeof window.GOOGLE_CLIENT_ID !== 'undefined' ? window.GOOGLE_CLIENT_ID : '');
-// Prefer configured scopes; fallback to minimal appDataFolder scope
-const SCOPES = (window.RMU_CONFIG && window.RMU_CONFIG.OAUTH_SCOPES) 
-    || 'https://www.googleapis.com/auth/drive.appdata';
-
+// CLIENT_ID and SCOPES are read lazily inside initializeGisAndGapi to avoid
+// a timing issue where inline scripts run before deferred `config.js` sets
+// `window.RMU_CONFIG`. Reading them early caused GIS to be disabled for
+// user-mode sign-ins. This preserves all behavior but fixes the missing
+// CLIENT_ID console error and re-enables Drive auth for users.
 let tokenClient;
 let accessToken = null;
 
@@ -1037,6 +1035,13 @@ function gisHandleResponse(resp) {
 }
 
 function initializeGisAndGapi() {
+    // Read client ID and scopes at the time of initialization (defer-safe)
+    const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) 
+        || (typeof window.GOOGLE_CLIENT_ID !== 'undefined' ? window.GOOGLE_CLIENT_ID : '');
+    // Prefer configured scopes; fallback to minimal appDataFolder scope
+    const SCOPES = (window.RMU_CONFIG && window.RMU_CONFIG.OAUTH_SCOPES) 
+        || 'https://www.googleapis.com/auth/drive.appdata';
+
     // Read any existing token set by index.html user flow
     const existingUserToken = sessionStorage.getItem('userToken');
     const isUserMode = sessionStorage.getItem('isUserMode');
