@@ -511,30 +511,38 @@
               const backendData = await response.json();
               // backend returns an array of items
               if(Array.isArray(backendData)) {
-                remotePortfolios = backendData.map(item => ({
-                  id: item.id || `drive_${item.file}`,
-                  file: item.file,
-                  basename: (item.file || '').replace(/^data\//, '').replace(/\.json$/i, ''),
-                  name: extractDisplayName(item.file, item.roll, item.email),
-                  roll: item.roll || '',
-                  email: item.email || '',
-                  updatedAt: item.updatedAt || 'Unknown',
-                  source: 'remote',
-                  driveId: item.id
-                }));
+                remotePortfolios = backendData.map(item => {
+                  const safeFile = (item && (item.file || item.name || item.filename)) ? String(item.file || item.name || item.filename) : '';
+                  if (!safeFile) return null; // skip malformed entry
+                  return {
+                    id: item.id || `drive_${safeFile}`,
+                    file: safeFile,
+                    basename: safeFile.replace(/^data\//, '').replace(/\.json$/i, ''),
+                    name: item.name || extractDisplayName(safeFile, item.roll, item.email),
+                    roll: item.roll || '',
+                    email: item.email || '',
+                    updatedAt: item.updatedAt || 'Unknown',
+                    source: 'remote',
+                    driveId: item.id
+                  };
+                }).filter(x => x !== null);
                 console.log(`[Admin] Loaded ${remotePortfolios.length} portfolios from Google Drive`);
               } else if (backendData && Array.isArray(backendData.manifest)) {
-                remotePortfolios = backendData.manifest.map(item => ({
-                  id: item.driveId || item.id || `drive_${item.file}`,
-                  file: item.file,
-                  basename: (item.file || '').replace(/^data\//, '').replace(/\.json$/i, ''),
-                  name: item.name || item.file,
-                  roll: item.roll || '',
-                  email: item.email || '',
-                  updatedAt: item.updatedAt || 'Unknown',
-                  source: 'remote',
-                  driveId: item.driveId || item.id
-                }));
+                remotePortfolios = backendData.manifest.map(item => {
+                  const safeFile = (item && (item.file || item.name || item.filename)) ? String(item.file || item.name || item.filename) : '';
+                  if (!safeFile) return null;
+                  return {
+                    id: item.driveId || item.id || `drive_${safeFile}`,
+                    file: safeFile,
+                    basename: safeFile.replace(/^data\//, '').replace(/\.json$/i, ''),
+                    name: item.name || safeFile,
+                    roll: item.roll || '',
+                    email: item.email || '',
+                    updatedAt: item.updatedAt || 'Unknown',
+                    source: 'remote',
+                    driveId: item.driveId || item.id
+                  };
+                }).filter(x => x !== null);
                 console.log(`[Admin] Loaded ${remotePortfolios.length} portfolios from backend manifest`);
               } else {
                 console.warn('[Admin] Backend returned unexpected shape for /api/list:', backendData);
@@ -593,19 +601,23 @@
         /[_-]([RS]\d{2})/i          // -R52, _R51, etc.
       ];
       
+      // Ensure filename is a string to avoid runtime errors when undefined
+      filename = String(filename || '');
       for(const pattern of rollPatterns) {
-        const match = filename.match(pattern);
-        if(match) return match[1].toUpperCase();
-      }
+          const match = filename.match(pattern);
+          if(match) return match[1].toUpperCase();
+        }
       return '';
     }
     
     // Helper function to extract display name from filename
     function extractDisplayName(filename, rollNo, email) {
-      // Remove .json extension and common suffixes
-      let name = filename.replace(/\.json$/i, '')
-                        .replace(/-?(medfolio|portfolio|file)$/i, '')
-                        .replace(/-?R?\d{2}$/i, '');
+      // Ensure filename is a string to avoid runtime errors
+        filename = String(filename || '');
+        // Remove .json extension and common suffixes
+        let name = filename.replace(/\.json$/i, '')
+                          .replace(/-?(medfolio|portfolio|file)$/i, '')
+                          .replace(/-?R?\d{2}$/i, '');
       
       // Replace separators with spaces and clean up
       name = name.replace(/[-_]+/g, ' ')
@@ -620,7 +632,7 @@
         name += ` (${rollNo})`;
       }
       
-      return name || filename.replace(/\.json$/i, '');
+  return name || String(filename || '').replace(/\.json$/i, '');
     }
     
     // Scan local data folder for JSON files
