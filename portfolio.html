@@ -295,35 +295,54 @@
         // user has signed in and we have 'userPortfolioData', prefer it over
         // fetching a local ?file and skip the fetch entirely.
         try {
-            // Detect preserved user-mode payload
+            // Detect preserved user-mode payload. If the user previously signed-in
+            // (isUserMode) we should preserve their auth context (userToken, userEmail)
+            // so Drive features remain available. Only when an actual preloaded
+            // portfolio JSON is present do we adopt and skip the fetch entirely.
             const preservedIsUserMode = sessionStorage.getItem('isUserMode') === 'true';
             const preservedUserData = sessionStorage.getItem('userPortfolioData');
             const preservedUserEmail = sessionStorage.getItem('userEmail');
+            const preservedUserToken = sessionStorage.getItem('userToken');
 
-            if (preservedIsUserMode && preservedUserData) {
-                console.log('[portfolio-loader] Detected user-mode portfolio in sessionStorage - preserving and using it instead of fetching ?file');
-                try {
-                    // Restore minimal globals for adoption flow
-                    window.__PRELOADED_PORTFOLIO_DATA = JSON.parse(preservedUserData);
-                } catch (e) {
-                    console.warn('[portfolio-loader] Failed to parse preserved user portfolio data:', e);
-                    // Fall back to clearing storage below
+            if (preservedIsUserMode) {
+                // If we have the actual portfolio payload saved in sessionStorage,
+                // restore it and immediately dispatch the ready event so adoption
+                // proceeds without network fetch.
+                if (preservedUserData) {
+                    console.log('[portfolio-loader] Detected user-mode portfolio in sessionStorage - preserving and using it instead of fetching ?file');
+                    try {
+                        window.__PRELOADED_PORTFOLIO_DATA = JSON.parse(preservedUserData);
+                    } catch (e) {
+                        console.warn('[portfolio-loader] Failed to parse preserved user portfolio data:', e);
+                    }
+                    // Do not clear sessionStorage (preserve auth context), but clear localStorage to avoid UI contamination
+                    try { localStorage.clear(); } catch(_) {}
+                    // Signal that data is ready so adoption logic can pick it up
+                    window.dispatchEvent(new CustomEvent('portfolio_data_ready'));
+                    console.log('[portfolio-loader] Dispatched portfolio_data_ready for preserved user data');
+                    // Skip the aggressive fetch path - return early from this loader
+                    return;
                 }
-                // Do not clear sessionStorage (preserve auth context), but clear localStorage to avoid UI contamination
-                try { localStorage.clear(); } catch(_) {}
-                // Signal that data is ready so adoption logic can pick it up
-                window.dispatchEvent(new CustomEvent('portfolio_data_ready'));
-                console.log('[portfolio-loader] Dispatched portfolio_data_ready for preserved user data');
-                // Skip the aggressive fetch path - return early from this loader
-                return;
-            }
 
-            // No user-mode data to preserve: clear everything as before
-            localStorage.clear();
-            sessionStorage.clear();
-            delete window.__PRELOADED_PORTFOLIO_DATA;
-            delete window.app;
-            console.log('[portfolio-loader] ✓ Cleared all cache and previous data');
+                // No payload saved, but user-mode auth exists: preserve auth keys so
+                // GIS/gapi can reuse tokens and show Drive buttons. Clear only
+                // localStorage (UI caches) but keep sessionStorage intact.
+                try { localStorage.clear(); } catch(_) {}
+                // Restore lightweight globals for adoption and auth helpers
+                if (preservedUserEmail) window.__USER_EMAIL = preservedUserEmail;
+                if (preservedUserToken) window.__USER_TOKEN = preservedUserToken;
+                window.__IS_USER_MODE = true;
+                // Inform RMU_AUTH if available so UI toggles that rely on it work
+                try { if (window.RMU_AUTH && typeof RMU_AUTH.setCurrentUserEmail === 'function') RMU_AUTH.setCurrentUserEmail(preservedUserEmail); } catch(_) {}
+                console.log('[portfolio-loader] Preserved user auth context from sessionStorage - continuing to fetch requested file');
+            } else {
+                // No user-mode; clear both storages to ensure a clean slate
+                localStorage.clear();
+                sessionStorage.clear();
+                delete window.__PRELOADED_PORTFOLIO_DATA;
+                delete window.app;
+                console.log('[portfolio-loader] ✓ Cleared all cache and previous data');
+            }
         } catch(e) { console.warn('[portfolio-loader] Cache clearing error:', e); }
         
         // Mark that we're loading a specific file to prevent repo override
@@ -1562,11 +1581,14 @@ window.addEventListener('load', () => {
     
     // Listen for auth state changes
     document.addEventListener('auth-state-changed', (e) => {
-        if(e.detail && e.detail.signedIn) {
+        const signedIn = !!(e.detail && e.detail.signedIn);
+        if(signedIn) {
             document.body.classList.add('signed-in');
         } else {
             document.body.classList.remove('signed-in');
         }
+        // Also update GIS/gapi UI state if available so Drive buttons are shown
+        try { if (typeof updateAuthUIStateGIS === 'function') updateAuthUIStateGIS(signedIn); } catch(_) {}
     });
 })();
 </script>
