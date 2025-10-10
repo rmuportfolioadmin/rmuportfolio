@@ -1,7 +1,13 @@
 // auth.js - modernized Google auth helpers using Google Identity Services only
 (function(){
   const cfg = (window.RMU_CONFIG || {});
-  const CLIENT_ID = cfg.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID || 'YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+  // Read the client id lazily at call time to avoid timing issues where config.js
+  // may not have been applied yet when this module executes. Use an explicit
+  // empty string when not configured to allow callers to detect missing id.
+  function getClientId() {
+    const c = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID) || (typeof window.GOOGLE_CLIENT_ID !== 'undefined' ? window.GOOGLE_CLIENT_ID : '');
+    return c || '';
+  }
   const VC_EMAIL = (cfg.VC_EMAIL || 'rmuportfolioa@gmail.com').toLowerCase();
 
   // Store current auth state
@@ -32,14 +38,15 @@
     
     try {
       // Use the credential response approach
-      if (!CLIENT_ID || CLIENT_ID.indexOf('YOUR_OAUTH_CLIENT_ID') === 0) {
+      const _cid = getClientId();
+      if (!_cid) {
         throw new Error('CLIENT_ID not configured. Set RMU_CONFIG.GOOGLE_CLIENT_ID or GOOGLE_CLIENT_ID');
       }
 
       return new Promise((resolve, reject)=>{
         try {
           google.accounts.id.initialize({ 
-            client_id: CLIENT_ID, 
+            client_id: _cid, 
             callback: (resp)=>{
               if(resp && resp.credential) {
                 currentToken = resp.credential;
@@ -103,7 +110,8 @@
 
   // Modern authentication method using Google Identity Services with rate limiting
   async function authenticateUser() {
-    if (!CLIENT_ID || CLIENT_ID.indexOf('YOUR_OAUTH_CLIENT_ID') === 0) {
+    const _cid2 = getClientId();
+    if (!_cid2) {
       throw new Error('CLIENT_ID not configured. Cannot authenticate.');
     }
     if (!shouldAllowAuthCall()) {
@@ -117,12 +125,12 @@
       await _ensureGisReady();
       
       return new Promise((resolve, reject) => {
-        if (!CLIENT_ID) {
+        if (!getClientId()) {
           console.error('[Auth] CLIENT_ID missing - cannot initialize token client');
           return reject(new Error('CLIENT_ID missing'));
         }
         const tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: CLIENT_ID,
+          client_id: getClientId(),
           scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
           callback: async (tokenResponse) => {
             if (tokenResponse.error) {
