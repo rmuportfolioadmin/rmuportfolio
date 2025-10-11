@@ -164,6 +164,12 @@
                   setCurrentUserEmail(userInfo.email);
                   // Persist sessionStorage so other parts of the app detect user-mode
                   try {
+                    // Persist access token and metadata. If the access token is actually
+                    // an ID token (JWT) prefer storing it as idToken too. We'll also
+                    // store any ID token we acquire later.
+                    if (tokenResponse.access_token && typeof tokenResponse.access_token === 'string' && tokenResponse.access_token.startsWith('eyJ')) {
+                      try { sessionStorage.setItem('idToken', tokenResponse.access_token); } catch(_){ }
+                    }
                     sessionStorage.setItem('userToken', tokenResponse.access_token);
                     sessionStorage.setItem('isUserMode', 'true');
                     sessionStorage.setItem('userEmail', userInfo.email);
