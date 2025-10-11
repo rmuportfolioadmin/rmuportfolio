@@ -174,7 +174,38 @@
                     } catch(_){ console.debug('[Auth] sessionStorage persisted (no mask) for userEmail:', userInfo.email); }
                   } catch(_) {}
                   console.log('[Auth] User authenticated:', userInfo.email);
-                  resolve({ token: tokenResponse.access_token, email: userInfo.email, userInfo });
+                      // Try to obtain an ID token (JWT) via Google Identity Services so backend gets a JWT (starts with 'eyJ')
+                      let idToken = null;
+                      try {
+                        if (window.google && google.accounts && google.accounts.id) {
+                          idToken = await new Promise((res) => {
+                            let handled = false;
+                            try {
+                              google.accounts.id.initialize({
+                                client_id: getClientId(),
+                                callback: (resp) => {
+                                  if (handled) return;
+                                  handled = true;
+                                  if (resp && resp.credential) {
+                                    try { sessionStorage.setItem('idToken', resp.credential); } catch(_){}
+                                    console.log('[Auth] Obtained ID token via GSI (stored idToken preview)');
+                                    return res(resp.credential);
+                                  }
+                                  return res(null);
+                                }
+                              });
+                              // Prompt will be silent if consent already given; otherwise user may see a prompt
+                              google.accounts.id.prompt();
+                              // Timeout fallback after 4s
+                              setTimeout(() => { if (!handled) { handled = true; return res(null); } }, 4000);
+                            } catch(e){ console.debug('[Auth] GSI id-token attempt failed', e); return res(null); }
+                          });
+                        }
+                      } catch(e) { console.debug('[Auth] ID token acquisition error:', e && e.message); }
+
+                      const primaryToken = (idToken && typeof idToken === 'string') ? idToken : tokenResponse.access_token;
+                      // If we got an idToken, prefer it as the token field so callers receive a JWT
+                      resolve({ token: primaryToken, email: userInfo.email, userInfo, access_token: tokenResponse.access_token, id_token: idToken });
                 } else {
                   reject(new Error(`Failed to get user info: ${userInfoResponse.status}`));
                 }
