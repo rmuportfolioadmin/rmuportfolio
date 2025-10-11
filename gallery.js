@@ -266,18 +266,21 @@
           console.warn('[gallery] Auth check failed:', e && e.message ? e.message : e);
         }
 
-        if(token){
-          const backendUrl = (window.RMU_CONFIG && window.RMU_CONFIG.BACKEND_BASE) ? window.RMU_CONFIG.BACKEND_BASE.replace(/\/$/, '') : '';
-          if(backendUrl){
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), (window.RMU_CONFIG && window.RMU_CONFIG.API_TIMEOUT) || 30000);
-            const resp = await fetch(`${backendUrl}/api/list`, {
-              method: 'GET',
-              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-              credentials: 'omit',
-              cache: 'no-store',
-              signal: controller.signal
-            });
+            if(token){
+              const backendUrl = (window.RMU_CONFIG && window.RMU_CONFIG.BACKEND_BASE) ? window.RMU_CONFIG.BACKEND_BASE.replace(/\/$/, '') : '';
+              if(backendUrl){
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), (window.RMU_CONFIG && window.RMU_CONFIG.API_TIMEOUT) || 30000);
+                // Prefer stored ID token if present
+                const idTok = sessionStorage.getItem('idToken');
+                const authToken = (idTok && idTok.startsWith('eyJ')) ? idTok : token;
+                const resp = await fetch(`${backendUrl}/api/list`, {
+                  method: 'GET',
+                  headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+                  credentials: 'omit',
+                  cache: 'no-store',
+                  signal: controller.signal
+                });
             clearTimeout(timeout);
             const t1_backend = performance.now();
             console.info('[gallery] /api/list response', { status: resp.status, durationMs: Math.round(t1_backend - t0_backend) });
