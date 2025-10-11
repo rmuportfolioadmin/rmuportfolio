@@ -1,1209 +1,1883 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Portfolio Gallery</title>
-  <meta name="description" content="Gallery of medical student portfolios" />
-  <link rel="icon" type="image/png" href="RMUlogo.png" />
-  <link rel="stylesheet" href="gallery.css?v=20250928.1" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <style>body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}</style>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <script src="config.js" defer></script>
-  <script src="auth.js" defer></script>
-  <script src="gallery.js" defer></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio Manager, RMU</title>
+    <meta name="description" content="Professional medical portfolio of Abdul Haseeb Ahmad, MBBS student specializing in internal medicine and cardiology.">
+        <!-- Cache hard disable (defensive; dynamic query params already used) -->
+        <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta http-equiv="Pragma" content="no-cache" />
+        <meta http-equiv="Expires" content="0" />
+    <link rel="stylesheet" href="portfolio.css?v=20250930.1">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+            /* Respect user motion preference: disable non-critical animations */
+            @media (prefers-reduced-motion: reduce) {
+                *, *::before, *::after { animation: none !important; transition: none !important; }
+            }
+        </style>
+        <script src="https://apis.google.com/js/api.js"></script>
+        <script src="https://accounts.google.com/gsi/client" async defer></script>
+        <script>
+    console.log("Google API script tag loaded!");
+</script>
+        <script src="config.js" defer></script>
+        <script src="auth.js" defer></script>
 </head>
-<body>
-  <header class="gal-header">
-    <div class="gal-container gal-header-inner">
-      <div class="rmu-brand">
-        <img src="RMUlogo.png" alt="Rawalpindi Medical University Logo" loading="lazy" />
-        <div class="rmu-text">
-          <div class="rmu-university">RAWALPINDI MEDICAL UNIVERSITY</div>
-          <div class="rmu-sub">PORTFOLIO GALLERY</div>
-        </div>
-      </div>
-      <h1 class="gal-title">Portfolio Gallery <small>Academic Archive</small></h1>
-      <div class="gal-search-wrapper">
-        <input id="search-box" type="search" placeholder="Search by name..." aria-label="Search portfolios" autocomplete="off" />
-        <label style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-size:12px;color:var(--gal-accent-alt);cursor:pointer;">
-          <input type="checkbox" id="scan-toggle" checked style="accent-color:var(--gal-accent);"> Auto Scan
-        </label>
-        <div id="admin-controls" style="display:none;margin-left:12px;">
-          <button id="admin-refresh" class="admin-btn" style="display:none;">🔄 Refresh</button>
-          <span id="admin-status" style="font-size:11px;color:var(--gal-accent);margin-left:8px;"></span>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <main class="gal-main gal-container">
-    <div id="status-bar" class="gal-status" role="status" aria-live="polite">Loading portfolios...</div>
-    <div id="scan-progress" style="height:6px;border-radius:4px;background:#d4dde7;overflow:hidden;position:relative;display:none;margin:-4px 0 14px;">
-      <div id="scan-progress-bar" style="height:100%;width:0;background:linear-gradient(90deg,#0a66c2,#2b79ff);transition:width .35s ease;filter:saturate(1.2);"></div>
-    </div>
-    <div id="gallery-grid" class="gal-grid" aria-label="Portfolio list" role="list"></div>
-  </main>
-
-  <footer class="gal-footer">
-    <div class="gal-container">
-      <small>&copy; <span id="year"></span> RMU Portfolio Gallery. <span id="count"></span></small>
-    </div>
-  </footer>
-
-  <script src="gallery.js?v=20250928.1"></script>
-  <script>document.getElementById('year').textContent=new Date().getFullYear();</script>
-  <!-- Global Admin Scan Overlay -->
-  <style>
-    body.admin-loading-scan .gal-main, body.admin-loading-scan .gal-header, body.admin-loading-scan .gal-footer { filter: blur(4px) brightness(.85); pointer-events:none; }
-    #admin-global-loading { position:fixed; inset:0; display:none; align-items:center; justify-content:center; z-index:10050; backdrop-filter:blur(4px) saturate(1.1); background:rgba(10,20,40,.35); }
-    #admin-global-loading .agl-inner { background:#fff; border:2px solid #0a66c2; border-radius:18px; padding:28px 34px; box-shadow:0 24px 64px -12px rgba(10,70,150,.35); display:flex; flex-direction:column; align-items:center; gap:14px; }
-    .agl-spinner { width:46px; height:46px; border-radius:50%; border:5px solid #e3edf6; border-top-color:#0a66c2; animation:aglSpin 0.85s linear infinite; }
-    .agl-text { font:600 15px Inter,system-ui,sans-serif; color:#0b2340; letter-spacing:.3px; }
-    @keyframes aglSpin { to { transform:rotate(360deg);} }
-  </style>
-  <div id="admin-global-loading"><div class="agl-inner"><div class="agl-spinner"></div><div class="agl-text">Scanning portfolios...</div></div></div>
-
-  <!-- VC Admin Mode Integration -->
-  <style>
-    .admin-btn{appearance:none;border:1px solid #d4dde7;border-radius:8px;padding:6px 12px;font:500 11px Inter,system-ui,sans-serif;background:#f8fafc;color:#0a66c2;cursor:pointer;transition:all 0.2s ease}
-    .admin-btn:hover{background:#e8f4ff;border-color:#0a66c2}
-    .admin-btn:disabled{opacity:0.5;cursor:not-allowed}
-    .admin-overlay{position:fixed;inset:0;background:rgba(10,20,40,.6);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:10000}
-    .admin-modal{width:min(400px,90vw);background:#fff;border-radius:16px;box-shadow:0 20px 60px -12px rgba(0,0,0,.25);padding:24px}
-    .admin-title{font:600 18px Inter,system-ui,sans-serif;color:#0b2340;margin:0 0 12px}
-    .admin-desc{font:14px/1.5 Inter,system-ui,sans-serif;color:#3a4b61;margin-bottom:20px}
-    .admin-actions{display:flex;gap:10px;justify-content:flex-end}
-    .admin-modal-btn{appearance:none;border:0;border-radius:10px;padding:10px 16px;font:600 13px Inter,system-ui,sans-serif;cursor:pointer}
-    .admin-modal-primary{background:linear-gradient(90deg,#0a66c2,#2b79ff);color:#fff;box-shadow:0 4px 12px -4px rgba(10,70,150,.4)}
-    .admin-modal-ghost{background:#f3f6fb;color:#0b2340}
-    .admin-error{color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font:12px Inter,system-ui,sans-serif;display:none;margin-bottom:12px}
-    .gal-badge-local{background:#22c55e !important;color:#fff !important}
-    .gal-badge-remote{background:#f59e0b !important;color:#fff !important}
-    body.admin-mode .gal-title small::after{content:' • Admin Mode';color:#0a66c2;font-weight:600}
-    body.admin-mode #gallery-grid .gal-row{cursor:pointer}
-    body.admin-mode #gallery-grid .gal-row:hover{transform:translateY(-2px);box-shadow:0 8px 25px -8px rgba(10,70,150,.25)}
+<body class="theme-rmu loading-initial">
+    <!-- Back to Gallery Button (conditionally hidden) -->
+    <a id="back-to-gallery" class="back-to-gallery" href="index.html" onclick="try{localStorage.clear();sessionStorage.clear();}catch(e){}if(history.length>1){history.back();return false;}" style="position:fixed;left:10px;top:10px;z-index:10000;background:linear-gradient(90deg,#0a66c2,#2b79ff);color:#fff;padding:8px 14px;border-radius:24px;font-size:13px;font-weight:600;text-decoration:none;box-shadow:0 4px 12px -2px rgba(10,70,150,.35);display:inline-flex;align-items:center;gap:6px;">
+        <span style="display:inline-block;transform:translateY(1px);">&#8592;</span> Gallery
+    </a>
     
-  /* Admin loading overlay (RMU theme) */
-  #admin-loading-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10002;backdrop-filter:saturate(1.05) blur(2px);}
-  body.admin-loading #admin-loading-overlay{display:flex}
-  .admin-loading-card{display:flex;align-items:center;gap:10px;background:#fff;border:2px solid #d4b071;border-radius:14px;padding:12px 16px;box-shadow:0 16px 48px -16px rgba(110,28,23,.28)}
-  .admin-loading-spinner{width:18px;height:18px;border-radius:50%;border:3px solid #f7efe6;border-top-color:#6e1c17;animation:adminSpin .8s linear infinite}
-  .admin-loading-text{font:600 13px Inter,system-ui,sans-serif;color:#6e1c17;letter-spacing:.2px}
-  @keyframes adminSpin{to{transform:rotate(360deg)}}
-    
-    /* Welcome Modal Styles */
-    .welcome-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:saturate(1.2) blur(8px);display:none;align-items:center;justify-content:center;z-index:10001}
-    .welcome-modal{width:min(560px,92vw);background:#fff;border-radius:20px;border:2px solid #d4b071;box-shadow:0 32px 80px -16px rgba(110,28,23,.45);padding:32px;text-align:center}
-    .welcome-header{margin-bottom:24px}
-    .welcome-logo{width:80px;height:80px;margin:0 auto 16px;border-radius:16px;background:linear-gradient(135deg,#6e1c17,#55120f);display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,.3)}
-    .welcome-title{font:700 24px Inter,system-ui,sans-serif;color:#6e1c17;margin:0 0 8px;letter-spacing:-0.5px}
-    .welcome-subtitle{font:500 16px Inter,system-ui,sans-serif;color:#8b4513;margin:0 0 20px}
-    .welcome-desc{font:14px/1.6 Inter,system-ui,sans-serif;color:#5d4037;margin-bottom:28px;max-width:460px;margin-left:auto;margin-right:auto}
-    .welcome-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-    .welcome-btn{appearance:none;border:0;border-radius:12px;padding:12px 20px;font:600 14px Inter,system-ui,sans-serif;cursor:pointer;transition:all 0.3s ease;min-width:140px;position:relative;overflow:hidden}
-    .welcome-btn::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);transition:left 0.5s ease;z-index:1}
-    .welcome-btn:hover::before{left:100%}
-    .welcome-btn-primary{background:linear-gradient(135deg,#6e1c17 0%,#55120f 100%);color:#fff;box-shadow:0 8px 24px -8px rgba(110,28,23,.4);border:2px solid #55120f}
-    .welcome-btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 32px -8px rgba(110,28,23,.5)}
-    .welcome-btn-ghost{background:rgba(110,28,23,.08);color:#6e1c17;border:2px solid #d4b071}
-    .welcome-btn-ghost:hover{background:rgba(110,28,23,.15);transform:translateY(-1px)}
-    .welcome-btn-icon{margin-right:8px;font-size:16px}
-    .loading-dots{display:none;align-items:center;justify-content:center;margin-top:16px;font:14px Inter,system-ui,sans-serif;color:#8b4513}
-    .loading-dots::after{content:'';margin-left:4px;animation:loadingDots 1.4s ease-in-out infinite both}
-    @keyframes loadingDots{0%,80%,100%{opacity:0}40%{opacity:1}}
-    
-    /* Portfolio Blur Effect */
-    body.portfolio-blurred .gal-main{filter:blur(8px) brightness(0.7);pointer-events:none;transition:all 0.4s ease}
-    body.portfolio-loaded .gal-main{filter:none;pointer-events:auto;transition:all 0.4s ease}
-    
-    /* Hidden Gallery Mode */
-    body.hide-gallery-nav .back-to-gallery{display:none !important}
-  </style>
-
-  <!-- Welcome Modal with Authentication Options -->
-  <div id="welcome-overlay" class="welcome-overlay" style="display:flex;">
-    <div class="welcome-modal">
-      <div class="welcome-header">
-        <div class="welcome-logo">
-          <img src="RMUlogo.png" alt="RMU Logo" style="width:60px;height:60px;object-fit:contain;"/>
-        </div>
-        <h1 class="welcome-title">Welcome to RMU Portfolio</h1>
-        <p class="welcome-subtitle">Rawalpindi Medical University</p>
-      </div>
-      <div id="welcome-error" class="admin-error" style="display:none;"></div>
-      <p class="welcome-desc">
-        Your digital academic portfolio is ready to explore. Sign in with Google to access your personal data and sync across devices, or continue without signing in to view the demo portfolio. <small style="display:block;margin-top:8px;opacity:0.7;">Note: This site uses Google Sign‑In provided by RMU. If sign‑in isn’t available due to updates, you can continue without signing in.</small>
-      </p>
-      <div class="welcome-actions">
-        <button id="welcome-signin" class="welcome-btn welcome-btn-primary">
-          <span class="welcome-btn-icon">🔑</span>Sign in with Google
-        </button>
-        <button id="welcome-continue" class="welcome-btn welcome-btn-ghost">
-          <span class="welcome-btn-icon">📝</span>Continue without sign in
-        </button>
-      </div>
-      <div id="welcome-loading" class="welcome-loading" style="display:none;">
-        <div class="loading-spinner"></div>
-        <div class="loading-text">Loading portfolio data...</div>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Admin Sign-In Modal (kept for compatibility) -->
-  <div id="admin-overlay" class="admin-overlay" style="display:none;">
-    <div class="admin-modal">
-      <div class="admin-title">Administrator Access</div>
-      <div id="admin-error" class="admin-error"></div>
-      <div class="admin-desc">Sign in with the authorized Google account to access the portfolio management system.</div>
-      <div class="admin-actions">
-        <button id="admin-cancel" class="admin-modal-btn admin-modal-ghost">Cancel</button>
-        <button id="admin-signin-confirm" class="admin-modal-btn admin-modal-primary">Sign In with Google</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Admin Loading Overlay (shown while opening remote portfolio) -->
-  <div id="admin-loading-overlay" aria-live="polite" aria-busy="true" role="status">
-    <div class="admin-loading-card">
-      <div class="admin-loading-spinner" aria-hidden="true"></div>
-      <div class="admin-loading-text">Opening portfolio…</div>
-    </div>
-  </div>
-
-  <script>
-  // Auto-generate files.json from data folder (utility function - defined early to avoid undefined errors)
-  async function generateFilesIndex() {
-    console.log('[Admin] Generating files.json content from data folder...');
-    const dataFiles = [];
-    const knownFiles = ['affans-medico-file-52.json','aieshas-medfolio-06-52.json','aliza-altaf-khans-16-R52-medfolio.json','aminah-liaqats-medfolio-R51.json','ans-javeds-medfolio.json','azharkhans-252-52-medfolio.json','calypsos-medfolio.json','eman-tariq-71-51-medfolio.json','fahmeeda-umers-56-52-medfolio.json','faiqa-farooqs-73-51-medfolio.json','fatima-aneess-63-R52medfolio .json','fatima-safdars-79-51-medfolio.json','hadia-khans-85-51-medfolio .json','hadia-mubashars-67-R52-portfolio.json','hadia-tanveers-87-51-portfolio.json','haiqa-munirs-91-51-medfolio.json','hassan-mehmood-221-R52.json','Ibrahim Shafi 280.json','kaleems-medfolio.json','marium-saleem-52B-105.json','mbks-medfolio-231-R52.json','muneeba-tehreems-medfolio .json','saidullah-280-R52.json','salwa-jannats-184-52-medfolio.json','saman-zahras-185-52medfolio.json','sattars-medfolio.json','Summaya-Muhammad-194-R52-medfolio.json','tehreem-durranis-medfolio.json','tehreem-durranis-R51-medfolio.json','wajiha-beintias-204-52-medfolio .json','waleejas-205-52-medfolio .json','zabu-bakar-saddique-medfolio.json','zabu-bakars-medfolio.json','zoha-saleems--214-52-medfolio.json'];
-    for(const filename of knownFiles) {
-      try {
-        const response = await fetch(`./data/${filename}`, { method: 'HEAD' });
-        if(response.ok) dataFiles.push({ file: `data/${filename}`, name: filename.replace(/\.json$/, '') });
-      } catch(err) {}
-    }
-    console.log(`%c[Admin] Found ${dataFiles.length} valid files`, 'color:green;font-weight:bold');
-    console.log('%cfiles.json content:', 'color:blue;font-weight:bold');
-    console.log(JSON.stringify(dataFiles, null, 2));
-    return dataFiles;
-  }
-
-  // Portfolio Welcome & Authentication System
-  (function() {
-    const ADMIN_EMAIL = 'rmuportfolioa@gmail.com';
-    let isAdminMode = false;
-    let isSignedIn = false;
-    let adminToken = null;
-    let currentUserEmail = null;
-    
-    const elements = {
-      adminControls: document.getElementById('admin-controls'),
-      adminRefresh: document.getElementById('admin-refresh'),
-      adminStatus: document.getElementById('admin-status'),
-      adminOverlay: document.getElementById('admin-overlay'),
-      adminError: document.getElementById('admin-error'),
-      adminCancel: document.getElementById('admin-cancel'),
-      adminSigninConfirm: document.getElementById('admin-signin-confirm'),
-      galleryGrid: document.getElementById('gallery-grid'),
-      statusBar: document.getElementById('status-bar'),
-      searchBox: document.getElementById('search-box'),
-      scanToggle: document.getElementById('scan-toggle'),
-      welcomeOverlay: document.getElementById('welcome-overlay'),
-      welcomeError: document.getElementById('welcome-error'),
-      welcomeSignin: document.getElementById('welcome-signin'),
-      welcomeContinue: document.getElementById('welcome-continue'),
-      welcomeLoading: document.getElementById('welcome-loading')
-    };
-    
-    function showAdminOverlay(show) {
-      if(elements.adminOverlay) elements.adminOverlay.style.display = show ? 'flex' : 'none';
-    }
-    
-    function setAdminError(msg) {
-      if(elements.adminError) {
-        elements.adminError.textContent = msg || '';
-        elements.adminError.style.display = msg ? 'block' : 'none';
-      }
-    }
-    
-    function setAdminStatus(msg) {
-      if(elements.adminStatus) elements.adminStatus.textContent = msg || '';
-    }
-    
-    function setStatus(msg) {
-      if(elements.statusBar) elements.statusBar.textContent = msg;
-    }
-    
-    function showWelcomeOverlay(show) {
-      if(elements.welcomeOverlay) elements.welcomeOverlay.style.display = show ? 'flex' : 'none';
-    }
-    
-    function setWelcomeError(msg) {
-      if(elements.welcomeError) {
-        elements.welcomeError.textContent = msg || '';
-        elements.welcomeError.style.display = msg ? 'block' : 'none';
-      }
-    }
-    
-    function showWelcomeLoading(show, message) {
-      if(elements.welcomeLoading) {
-        elements.welcomeLoading.style.display = show ? 'flex' : 'none';
-        const loadingText = elements.welcomeLoading.querySelector('.loading-text');
-        if(loadingText && message) {
-          loadingText.textContent = message;
-        }
-      }
-    }
-    
-    function blurPortfolio(blur) {
-      document.body.classList.toggle('portfolio-blurred', blur);
-      document.body.classList.toggle('portfolio-loaded', !blur);
-    }
-    
-    function hideGalleryNavigation(hide) {
-      document.body.classList.toggle('hide-gallery-nav', hide);
-    }
-    
-    function enableAdminMode() {
-      isAdminMode = true;
-      document.body.classList.add('admin-mode');
-      if(elements.adminControls) elements.adminControls.style.display = 'block';
-      if(elements.adminSignin) elements.adminSignin.style.display = 'none';
-      if(elements.adminRefresh) elements.adminRefresh.style.display = 'inline-block';
-      if(elements.scanToggle) elements.scanToggle.checked = false; // Disable auto scan in admin mode
-      setAdminStatus('Admin');
-      // Disable local fallback enumeration immediately to avoid flooding with 404s
-      try { if(window.disableLocalFallback) window.disableLocalFallback(); } catch(_) {}
-      try { if(window.abortDataEnumeration) window.abortDataEnumeration(); } catch(_) {}
-      loadAdminPortfolios();
-    }
-    
-    function disableAdminMode() {
-      isAdminMode = false;
-      adminToken = null;
-      document.body.classList.remove('admin-mode');
-      if(elements.adminControls) elements.adminControls.style.display = 'none';
-      setAdminStatus('');
-      // Restore normal gallery functionality
-      if(window.loadGallery) window.loadGallery();
-    }
-    
-    async function signInFromWelcome() {
-      try {
-        showWelcomeLoading(true);
-        setWelcomeError('');
-        
-        console.log('[Welcome] Starting authentication...');
-        
-        // Wait for RMU_AUTH to be ready
-        if (!window.RMU_AUTH) {
-          console.log('[Welcome] Waiting for RMU_AUTH...');
-          await new Promise(resolve => {
-            if (window.RMU_AUTH) {
-              resolve();
-            } else {
-              document.addEventListener('auth-ready', resolve, { once: true });
-            }
-          });
+    <!-- Gallery Navigation Control Script -->
+    <script>
+    (function() {
+        function getParam(name) {
+            try { return new URLSearchParams(location.search).get(name); } catch(e) { return null; }
         }
         
-        // Use the modernized auth system with fallback
-        try {
-          const authResult = await window.RMU_AUTH.authenticateUser();
-          
-          adminToken = authResult.token;
-          currentUserEmail = authResult.email;
-          isSignedIn = true;
-        } catch (authError) {
-          console.warn('[Welcome] Modern auth failed, providing fallback:', authError);
-          
-          // Graceful fallback - continue without auth but inform user
-          setWelcomeError('Google Sign-In is currently updating to new security standards. You can browse portfolios without signing in.');
-          
-          setTimeout(() => {
-            continueWithoutSignIn();
-          }, 3000);
-          return;
-        }
-        
-        if(!adminToken) {
-          setWelcomeError('Failed to obtain authentication token');
-          showWelcomeLoading(false);
-          return;
-        }
-        
-        // Check if admin or regular user
-        if(currentUserEmail?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-          // VC/Admin user - show loading and enable admin mode with backend integration
-          console.log('[Auth] VC email detected - activating admin mode with backend integration');
-          setStatus('VC authenticated - Initializing gallery...');
-          showWelcomeLoading(true, 'Scanning portfolios from Google Drive...');
-          
-          try {
-            // Activate backend to scan Drive and create files.json
-            await initializeVCGallery(adminToken);
-            showWelcomeOverlay(false);
-            blurPortfolio(false);
-            enableAdminMode();
-            showWelcomeLoading(false);
-          } catch(err) {
-            console.error('[Auth] VC gallery initialization failed:', err);
-            setWelcomeError('Failed to initialize VC gallery: ' + (err.message || err));
-            showWelcomeLoading(false);
-          }
+        const welcomeMode = getParam('welcome');
+        const userMode = getParam('user');
+        const driveMode = getParam('drive');
+        const adminMode = getParam('admin');
+
+        // Global view mode: 'admin' | 'user' | 'public'
+        // Set early so subsequent logic can opt-out of user-only behavior when admin view is requested.
+        if (adminMode) {
+            window.__VIEW_MODE = 'admin';
+        } else if (userMode) {
+            window.__VIEW_MODE = 'user';
+        } else if (welcomeMode) {
+            window.__VIEW_MODE = 'user'; // welcome mode behaves like user-mode UI (no gallery nav)
         } else {
-          // Regular user - load their portfolio from Drive and hide gallery navigation
-          console.log('[Auth] Regular user detected - loading user portfolio');
-          showWelcomeOverlay(false);
-          blurPortfolio(false);
-          hideGalleryNavigation(true);
-          loadUserPortfolioFromDrive(currentUserEmail, adminToken);
+            window.__VIEW_MODE = 'public';
         }
         
-        showWelcomeLoading(false);
-        
-      } catch(err) {
-        console.error('Welcome sign-in error:', err);
-        
-        // Try fallback with simpler authentication flow
-        try {
-          console.log('[Auth] Trying fallback authentication method...');
-          setWelcomeError('Retrying with alternative method...');
-          
-          await fallbackGoogleAuth();
-          
-        } catch(fallbackErr) {
-          console.error('Fallback auth also failed:', fallbackErr);
-          setWelcomeError('Sign-in failed. This may be due to browser restrictions or Google API changes. Please try refreshing the page or contact support.');
-        }
-        
-        showWelcomeLoading(false);
-      }
-    }
-    
-    // Fallback authentication method
-    async function fallbackGoogleAuth() {
-      console.log('[Auth] Using fallback authentication...');
-      
-      // For now, just continue without authentication but show a message
-      setWelcomeError('Authentication temporarily unavailable. Continuing with limited functionality...');
-      
-      // Wait a moment, then proceed
-      setTimeout(() => {
-        continueWithoutSignIn();
-      }, 2000);
-    }
-    
-    async function continueWithoutSignIn() {
-      try {
-        showWelcomeOverlay(false);
-        blurPortfolio(false);
-        hideGalleryNavigation(true);
-        
-        // Load the first available portfolio or portfolio-data.json
-        await loadDefaultPortfolio();
-        
-      } catch(err) {
-        console.error('Continue without sign-in error:', err);
-      }
-    }
-    
-    async function initializeVCGallery(token) {
-      console.log('[VC] Initializing VC gallery with backend integration');
-      const config = window.RMU_CONFIG || {};
-      const backendBase = (config.BACKEND_BASE || '').replace(/\/$/, '');
-      
-      if (!backendBase || config.IS_LOCALHOST) {
-        console.log('[VC] Backend not configured or localhost - using local data only');
-        return;
-      }
-      
-      try {
-          console.log('[VC] Requesting backend to scan Drive and generate files.json');
-          setStatus('Backend scanning Google Drive...');
-
-          const t0_gen = performance.now();
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
-          // Prefer idToken if available in sessionStorage
-          const idTok = sessionStorage.getItem('idToken');
-          const authToken = (idTok && idTok.startsWith('eyJ')) ? idTok : token;
-          const response = await fetch(`${backendBase}/api/generate-manifest`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${authToken}`,
-              'Content-Type': 'application/json'
-            },
-            credentials: 'omit',
-            cache: 'no-store',
-            signal: controller.signal
-          });
-
-          clearTimeout(timeout);
-          const t1_gen = performance.now();
-          console.info('[VC] /api/generate-manifest response', { status: response.status, durationMs: Math.round(t1_gen - t0_gen) });
-
-          if (response.ok) {
-            let body = null;
-            try { body = await response.json(); } catch(e) { body = await response.text().catch(()=>null); }
-            console.log('[VC] Backend manifest generation result:', body);
-            setStatus(`Found ${body?.count || 0} portfolios in Drive`);
-          } else {
-            const errorText = await response.text().catch(() => response.statusText);
-            console.warn('[VC] Backend manifest generation failed:', errorText);
-            setStatus('Drive scan completed with warnings');
-          }
-        
-      } catch (err) {
-        console.error('[VC] Backend initialization error:', err);
-        setStatus('Using local data - backend unavailable');
-        // Don't throw - allow fallback to local data
-      }
-    }
-
-    async function loadAdminPortfolios() {
-      try {
-        if(!adminToken) {
-          setStatus('Not authenticated for admin access');
-          return;
-        }
-
-        console.log('[Admin] Loading portfolios in admin-only mode (Drive only)');
-        setStatus('Loading portfolios...');
-
-        // Activate global scan overlay & blur
-        try { document.body.classList.add('admin-loading-scan'); } catch(_) {}
-        const overlay = document.getElementById('admin-global-loading');
-        if(overlay) overlay.style.display = 'flex';
-
-        const config = window.RMU_CONFIG || {};
-        const backendBase = (config.BACKEND_BASE || '').replace(/\/$/, '');
-
-        // When admin is signed in, do NOT attempt files.json or local data/ enumeration.
-        // Only call the backend /api/list. This avoids hundreds of 404 requests when
-        // the site is hosted without a local data folder.
-        let remotePortfolios = [];
-        if(backendBase && !config.IS_LOCALHOST) {
-          try {
-            console.log('[Admin] Loading portfolios from Google Drive via backend (admin-only)');
-            setStatus('Loading Drive portfolios...');
-
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), config.API_TIMEOUT || 20000);
-
-            const t0_list = performance.now();
-            const idTok = sessionStorage.getItem('idToken');
-            const authToken = (idTok && idTok.startsWith('eyJ')) ? idTok : adminToken;
-            const response = await fetch(`${backendBase}/api/list`, {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json'
-              },
-              credentials: 'omit',
-              cache: 'no-store',
-              signal: controller.signal
-            });
-
-            clearTimeout(timeout);
-            const t1_list = performance.now();
-            console.info('[Admin] /api/list response', { status: response.status, durationMs: Math.round(t1_list - t0_list) });
-
-            if(response.ok) {
-              const backendData = await response.json();
-              // backend returns an array of items
-              if(Array.isArray(backendData)) {
-                remotePortfolios = backendData.map(item => {
-                  const safeFile = (item && (item.file || item.name || item.filename)) ? String(item.file || item.name || item.filename) : '';
-                  if (!safeFile) return null; // skip malformed entry
-                  return {
-                    id: item.id || `drive_${safeFile}`,
-                    file: safeFile,
-                    basename: safeFile.replace(/^data\//, '').replace(/\.json$/i, ''),
-                    name: item.name || extractDisplayName(safeFile, item.roll, item.email),
-                    roll: item.roll || '',
-                    email: item.email || '',
-                    updatedAt: item.updatedAt || 'Unknown',
-                    source: 'remote',
-                    driveId: item.id
-                  };
-                }).filter(x => x !== null);
-                console.log(`[Admin] Loaded ${remotePortfolios.length} portfolios from Google Drive`);
-              } else if (backendData && Array.isArray(backendData.manifest)) {
-                remotePortfolios = backendData.manifest.map(item => {
-                  const safeFile = (item && (item.file || item.name || item.filename)) ? String(item.file || item.name || item.filename) : '';
-                  if (!safeFile) return null;
-                  return {
-                    id: item.driveId || item.id || `drive_${safeFile}`,
-                    file: safeFile,
-                    basename: safeFile.replace(/^data\//, '').replace(/\.json$/i, ''),
-                    name: item.name || safeFile,
-                    roll: item.roll || '',
-                    email: item.email || '',
-                    updatedAt: item.updatedAt || 'Unknown',
-                    source: 'remote',
-                    driveId: item.driveId || item.id
-                  };
-                }).filter(x => x !== null);
-                console.log(`[Admin] Loaded ${remotePortfolios.length} portfolios from backend manifest`);
-              } else {
-                console.warn('[Admin] Backend returned unexpected shape for /api/list:', backendData);
-              }
-            } else {
-              // Backend failed (403/401/500 etc.). Do not fall back to the expensive local scan when admin is signed in.
-              let bodySnippet = '';
-              try { bodySnippet = (await response.text()).slice(0,300); } catch(_){ }
-              console.warn('[Admin] Backend /api/list failed:', response.status, bodySnippet);
-              setStatus('Failed to fetch Drive portfolios. Please try again later.');
-              // Hide overlay and exit without scanning local files to avoid flooding with 404s
-              try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
-              if(overlay) overlay.style.display = 'none';
-              return;
+        // Hide gallery button for non-admin authenticated users or welcome mode
+        if (welcomeMode || (userMode && !adminMode)) {
+            console.log('[Portfolio] Hiding gallery navigation (welcome or user mode)');
+            const galleryBtn = document.getElementById('back-to-gallery');
+            if(galleryBtn) {
+                galleryBtn.style.display = 'none';
             }
-          } catch(err) {
-            console.log('[Admin] Backend unavailable for Drive access:', err && err.message ? err.message : err);
-            setStatus('Backend unavailable. Please check the server and try again.');
-            try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
-            if(overlay) overlay.style.display = 'none';
-            return;
-          }
-        } else {
-          console.log('[Admin] Backend not configured or localhost - admin requires backend access');
-          setStatus('Backend not configured. Admin features require server access.');
-          try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
-          if(overlay) overlay.style.display = 'none';
-          return;
-        }
-
-        // Combine and display portfolios (remote only in admin mode)
-        const allPortfolios = [...remotePortfolios];
-        try { document.body.classList.remove('admin-loading-scan'); } catch(_) {}
-        if(overlay) overlay.style.display = 'none';
-
-        if(allPortfolios.length === 0) {
-          setStatus('No portfolios found in Drive');
-          if(elements.galleryGrid) elements.galleryGrid.innerHTML = '';
-          return;
-        }
-
-        console.log(`[Admin] Total portfolios: ${allPortfolios.length} (remote only)`);
-        displayAdminPortfolios(allPortfolios);
-
-      } catch(err) {
-        console.error('[Admin] Load portfolios error:', err);
-        setStatus('Failed to load portfolios: ' + (err.message || err));
-      }
-    }
-    
-    // Helper function to extract roll number from filename
-    function extractRollFromFilename(filename) {
-      const rollPatterns = [
-        /-(\d{1,3}-?[RS]?\d{2})/i,  // -123-R52, -52-R52, etc.
-        /[_-](\d{3})[^\d]/i,        // _280, -221, etc.
-        /[_-]([RS]\d{2})/i          // -R52, _R51, etc.
-      ];
-      
-      // Ensure filename is a string to avoid runtime errors when undefined
-      filename = String(filename || '');
-      for(const pattern of rollPatterns) {
-          const match = filename.match(pattern);
-          if(match) return match[1].toUpperCase();
-        }
-      return '';
-    }
-    
-    // Helper function to extract display name from filename
-    function extractDisplayName(filename, rollNo, email) {
-      // Ensure filename is a string to avoid runtime errors
-        filename = String(filename || '');
-        // Remove .json extension and common suffixes
-        let name = filename.replace(/\.json$/i, '')
-                          .replace(/-?(medfolio|portfolio|file)$/i, '')
-                          .replace(/-?R?\d{2}$/i, '');
-      
-      // Replace separators with spaces and clean up
-      name = name.replace(/[-_]+/g, ' ')
-                 .replace(/\s+/g, ' ')
-                 .trim();
-      
-      // Capitalize words
-      name = name.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
-      
-      // If we have roll number, append it
-      if (rollNo) {
-        name += ` (${rollNo})`;
-      }
-      
-  return name || String(filename || '').replace(/\.json$/i, '');
-    }
-    
-    // Scan local data folder for JSON files
-    async function scanLocalDataFolder() {
-      const localFiles = [];
-      
-      // Try common filename patterns from the data folder
-      const knownFiles = [
-        'affans-medico-file-52.json', 'aieshas-medfolio-06-52.json', 'aliza-altaf-khans-16-R52-medfolio.json',
-        'aminah-liaqats-medfolio-R51.json', 'ans-javeds-medfolio.json', 'azharkhans-252-52-medfolio.json',
-        'calypsos-medfolio.json', 'eman-tariq-71-51-medfolio.json', 'fahmeeda-umers-56-52-medfolio.json',
-        'faiqa-farooqs-73-51-medfolio.json', 'fatima-aneess-63-R52medfolio .json', 'fatima-safdars-79-51-medfolio.json',
-        'hadia-khans-85-51-medfolio .json', 'hadia-mubashars-67-R52-portfolio.json', 'hadia-tanveers-87-51-portfolio.json',
-        'haiqa-munirs-91-51-medfolio.json', 'hassan-mehmood-221-R52.json', 'Ibrahim Shafi 280.json',
-        'kaleems-medfolio.json', 'marium-saleem-52B-105.json', 'mbks-medfolio-231-R52.json',
-        'muneeba-tehreems-medfolio .json', 'saidullah-280-R52.json', 'salwa-jannats-184-52-medfolio.json',
-        'saman-zahras-185-52medfolio.json', 'sattars-medfolio.json', 'Summaya-Muhammad-194-R52-medfolio.json',
-        'tehreem-durranis-medfolio.json', 'tehreem-durranis-R51-medfolio.json', 'wajiha-beintias-204-52-medfolio .json',
-        'waleejas-205-52-medfolio .json', 'zabu-bakar-saddique-medfolio.json', 'zabu-bakars-medfolio.json',
-        'zoha-saleems--214-52-medfolio.json'
-      ];
-      
-      for(const filename of knownFiles) {
-        try {
-          const response = await fetch(`./data/${filename}`, { method: 'HEAD' });
-          if(response.ok) {
-            localFiles.push({
-              id: `local_data_${filename}`,
-              file: filename.replace(/\.json$/, ''),
-              roll: extractRollFromFilename(filename),
-              email: '',
-              updatedAt: 'Local File',
-              source: 'local',
-              localPath: `data/${filename}`
-            });
-          }
-        } catch(err) {
-          // File doesn't exist, continue
-        }
-      }
-      
-      console.log(`[Admin] Found ${localFiles.length} files in data folder scan`);
-      return localFiles;
-    }
-    
-    function displayAdminPortfolios(portfolios) {
-      if(!elements.galleryGrid) return;
-      
-      elements.galleryGrid.innerHTML = '';
-      
-      if(!portfolios || portfolios.length === 0) {
-        setStatus('No portfolios found (local or remote)');
-        return;
-      }
-      
-      const localCount = portfolios.filter(p => p.source === 'local').length;
-      const remoteCount = portfolios.filter(p => p.source === 'remote').length;
-      
-      let statusMsg = `Found ${portfolios.length} portfolio${portfolios.length !== 1 ? 's' : ''}`;
-      if(localCount > 0 && remoteCount > 0) {
-        statusMsg += ` (${localCount} local, ${remoteCount} remote)`;
-      } else if(localCount > 0) {
-        statusMsg += ` (local files)`;
-      } else if(remoteCount > 0) {
-        statusMsg += ` (remote files)`;
-      }
-      
-      setStatus(statusMsg);
-      
-      portfolios.forEach((portfolio, index) => {
-        const row = document.createElement('div');
-        row.className = 'gal-row';
-        row.setAttribute('data-file-id', portfolio.id);
-        row.setAttribute('data-filename', portfolio.file);
-        if (portfolio.basename) row.setAttribute('data-basename', portfolio.basename);
-        row.setAttribute('data-source', portfolio.source);
-        // Store extra searchable fields to improve search coverage for remote items
-        if (portfolio.roll) row.setAttribute('data-roll', portfolio.roll);
-        if (portfolio.email) row.setAttribute('data-email', portfolio.email);
-        // Extract name from filename or use roll/email
-        const displayName = extractDisplayName(portfolio.file, portfolio.roll, portfolio.email);
-        const rollNumber = portfolio.roll || 'N/A';
-        const lastUpdated = portfolio.updatedAt === 'Local File' ? 'Local File' : 
-                           portfolio.updatedAt ? new Date(portfolio.updatedAt).toLocaleDateString() : 'Unknown';
-        // Source badge
-        const sourceBadge = portfolio.source === 'local' ? 
-          '<span class="gal-badge gal-badge-local">Local</span>' :
-          '<span class="gal-badge gal-badge-remote">Remote</span>';
-        row.setAttribute('data-name', displayName);
-        row.innerHTML = `
-          <div class="gal-avatar">${getInitials(displayName)}</div>
-          <div class="gal-info">
-            <div class="gal-name">${displayName}</div>
-            <div class="gal-meta">Roll: ${rollNumber} • Updated: ${lastUpdated}</div>
-          </div>
-          <div class="gal-actions">
-            ${sourceBadge}
-          </div>
-        `;
-        // Add click handler to load portfolio
-        row.addEventListener('click', () => loadPortfolioAdmin(portfolio));
-        // Always remove .hidden in case of re-render
-        row.classList.remove('hidden');
-        elements.galleryGrid.appendChild(row);
-      });
-
-      // Always (re)bind the search filter after rendering
-      if (elements.searchBox) {
-        // Remove any previous event listeners by replacing the node
-        const oldInput = elements.searchBox;
-        const newInput = oldInput.cloneNode(true);
-        oldInput.parentNode.replaceChild(newInput, oldInput);
-        elements.searchBox = newInput;
-        elements.searchBox.addEventListener('input', () => filterAdminPortfolios(elements.searchBox.value));
-      }
-      // Apply filter if there is a current query
-      if (elements.searchBox && elements.searchBox.value) {
-        filterAdminPortfolios(elements.searchBox.value);
-      }
-      
-      // Enable search filtering (override any prior gallery handler)
-      if(elements.searchBox) {
-        try { elements.searchBox.oninput = null; } catch(_){ }
-        elements.searchBox.addEventListener('input', () => filterAdminPortfolios(elements.searchBox.value));
-      }
-    }
-    
-    function extractDisplayName(filename, roll, email) {
-      // Remove .json extension
-      let name = filename.replace(/\.json$/i, '');
-      
-      // If filename contains underscore, take the part before roll number
-      if(roll && name.includes('_' + roll)) {
-        name = name.split('_' + roll)[0];
-      }
-      
-      // Convert underscores to spaces and title case
-      name = name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-      
-      return name || roll || email || 'Unknown';
-    }
-    
-    function getInitials(name) {
-      return name.split(' ').map(n => n[0]).join('').substr(0, 2).toUpperCase();
-    }
-    
-    function filterAdminPortfolios(query) {
-      if(!elements.galleryGrid) return;
-      
-      const rows = elements.galleryGrid.querySelectorAll('.gal-row');
-      let visibleCount = 0;
-      
-      rows.forEach(row => {
-  const name = row.querySelector('.gal-name')?.textContent || '';
-        const meta = row.querySelector('.gal-meta')?.textContent || '';
-  const filename = row.getAttribute('data-filename') || '';
-  const basename = row.getAttribute('data-basename') || '';
-        const roll = row.getAttribute('data-roll') || '';
-        const email = row.getAttribute('data-email') || '';
-  const extraName = (row.getAttribute('data-name') || '');
-        // Search across all visible text plus hidden attributes for both local and remote
-  const searchText = (name + ' ' + extraName + ' ' + meta + ' ' + filename + ' ' + basename + ' ' + roll + ' ' + email).toLowerCase();
-        const matches = !query || searchText.includes(query.toLowerCase());
-        
-        // Use CSS class to hide (display:none !important) to override admin-mode row display
-        row.classList.toggle('hidden', !matches);
-        if(matches) visibleCount++;
-      });
-      
-      setStatus(query ? `${visibleCount} portfolio${visibleCount !== 1 ? 's' : ''} match "${query}"` : `${visibleCount} portfolio${visibleCount !== 1 ? 's' : ''}`);
-    }
-    
-    async function loadPortfolioAdmin(portfolio) {
-      try {
-        // Prevent multiple clicks while loading
-        if (window.__ADMIN_PORTFOLIO_OPENING) return;
-        window.__ADMIN_PORTFOLIO_OPENING = true;
-        try{
-          if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = 'none';
-          if (elements.searchBox) elements.searchBox.disabled = true;
-          document.body.classList.add('admin-loading');
-        }catch(_){ }
-        setStatus(`Loading ${portfolio.file}...`);
-        
-        if(portfolio.source === 'local') {
-          // Load local portfolio file
-          const localPath = portfolio.localPath || `data/${portfolio.file}.json`;
-          const url = `portfolio.html?file=${encodeURIComponent(localPath)}&admin=1`;
-          window.open(url, '_blank');
-          setStatus('Local portfolio opened in new tab');
-          // Re-enable UI immediately for local open
-          try{
-            if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = '';
-            if (elements.searchBox) elements.searchBox.disabled = false;
-          }catch(_){ }
-          window.__ADMIN_PORTFOLIO_OPENING = false;
-          document.body.classList.remove('admin-loading');
-          
-        } else if(portfolio.source === 'remote') {
-          // Load remote portfolio from backend
-          const config = window.RMU_CONFIG || {};
-          const backendBase = (config.BACKEND_BASE || '').replace(/\/$/, '');
-          
-          if(!backendBase) {
-            throw new Error('Backend not configured');
-          }
-          
-          const response = await fetch(`${backendBase}/api/download?id=${encodeURIComponent(portfolio.id)}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${adminToken}`,
-              'Content-Type': 'application/json'
-            },
-            credentials: 'omit',
-            cache: 'no-store'
-          });
-          
-          if(!response.ok) {
-            throw new Error(`Failed to download remote portfolio: ${response.status}`);
-          }
-          
-          const portfolioData = await response.json();
-          
-          // Open portfolio in new tab/window (no ?file param to avoid loader overriding admin data)
-          const url = `portfolio.html?admin=1&remote=1`;
-          const portfolioWindow = window.open(url, '_blank');
-          
-          // Pass the data to the new window with comprehensive retry mechanism
-          if(portfolioWindow) {
-            let messagesSent = 0;
-            let messagingActive = true;
-            
-            const sendData = () => {
-              try {
-                if(!messagingActive) return;
-                portfolioWindow.postMessage({
-                  type: 'admin-portfolio-data',
-                  data: portfolioData,
-                  filename: portfolio.file,
-                  source: 'remote'
-                }, '*');
-                messagesSent++;
-                console.log(`[Admin] Portfolio data sent to new window (attempt ${messagesSent})`);
-              } catch(err) {
-                console.warn('[Admin] Failed to send portfolio data:', err);
-              }
-            };
-            
-            // Listen for confirmation from child window
-            const messageListener = (event) => {
-              if(event.source === portfolioWindow && event.data && event.data.type === 'admin-data-received') {
-                console.log('[Admin] Portfolio data delivery confirmed');
-                messagingActive = false;
-                window.removeEventListener('message', messageListener);
-                // Re-enable clicks after the new tab confirms receipt
-                try{
-                  if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = '';
-                  if (elements.searchBox) elements.searchBox.disabled = false;
-                }catch(_){ }
-                window.__ADMIN_PORTFOLIO_OPENING = false;
-                document.body.classList.remove('admin-loading');
-              }
-            };
-            window.addEventListener('message', messageListener);
-            
-            // Try multiple approaches to ensure message is received
-            // 1. Try immediately 
-            setTimeout(sendData, 50);
-            
-            // 2. Try on load event
-            portfolioWindow.addEventListener('load', sendData);
-            
-            // 3. Regular interval attempts
-            const persistentSend = setInterval(() => {
-              if(!messagingActive) {
-                clearInterval(persistentSend);
-                return;
-              }
-              sendData();
-              
-              // Stop after 30 attempts (15 seconds)
-              if(messagesSent > 30) {
-                console.warn('[Admin] Stopped trying to send portfolio data after 30 attempts');
-                messagingActive = false;
-                clearInterval(persistentSend);
-              }
-            }, 500);
-            
-            // 4. Final cleanup
-            setTimeout(() => {
-              messagingActive = false;
-              window.removeEventListener('message', messageListener);
-              // Safety re-enable after timeout
-              try{
-                if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = '';
-                if (elements.searchBox) elements.searchBox.disabled = false;
-              }catch(_){ }
-              window.__ADMIN_PORTFOLIO_OPENING = false;
-              document.body.classList.remove('admin-loading');
-            }, 20000);
-          }
-          
-          setStatus('Remote portfolio opened in new tab');
+            // Also add body class for additional hiding
+            document.body.classList.add('hide-gallery-nav');
         }
         
-      } catch(err) {
-        console.error('Load portfolio error:', err);
-        setStatus('Failed to load portfolio: ' + (err.message || err));
-        // Ensure UI is re-enabled on error
-        try{
-          if (elements.galleryGrid) elements.galleryGrid.style.pointerEvents = '';
-          if (elements.searchBox) elements.searchBox.disabled = false;
-        }catch(_){ }
-        window.__ADMIN_PORTFOLIO_OPENING = false;
-        document.body.classList.remove('admin-loading');
-      }
-    }
-    
-    async function loadDefaultPortfolio() {
-      try {
-        // Try portfolio-data.json first
-        let portfolioUrl = './portfolio-data.json';
-        let response = await fetch(portfolioUrl, { cache: 'no-store' });
+        // Roll number format validation
+        function isValidRollNoFormat(rollNo) {
+            if (!rollNo || typeof rollNo !== 'string') return false;
+            // Format: XXX-RXX-X (3 digits, R + 2 digits, 1 letter)
+            const rollNoPattern = /^\d{3}-R\d{2}-[A-Z]$/;
+            return rollNoPattern.test(rollNo.trim().toUpperCase());
+        }
         
-        if(!response.ok) {
-          // If portfolio-data.json not found, try first file from files.json
-          const filesResp = await fetch('./files.json?t=' + Date.now(), { cache: 'no-store' });
-          if(filesResp.ok) {
-            const filesData = await filesResp.json();
-            if(Array.isArray(filesData) && filesData.length > 0) {
-              portfolioUrl = './' + filesData[0].file;
+        // Show roll number format guide popup
+        function showRollNoGuide() {
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.style.display = 'flex';
+                // Add slight delay for smooth animation
+                setTimeout(() => overlay.classList.add('show'), 10);
             }
-          }
         }
         
-        // Open the portfolio in the same window
-        window.location.href = `portfolio.html?file=${encodeURIComponent(portfolioUrl)}&welcome=1`;
-        
-      } catch(err) {
-        console.error('Error loading default portfolio:', err);
-        setStatus('Error loading default portfolio');
-      }
-    }
-    
-    async function loadUserPortfolioFromDrive(email, token) {
-      try {
-        const config = window.RMU_CONFIG || {};
-        const backendBase = (config.BACKEND_BASE || '').replace(/\/$/, '');
-        
-        if(!backendBase) {
-          console.log('[User] Backend not configured, loading default portfolio');
-          await loadDefaultPortfolio();
-          return;
+        // Hide roll number format guide popup
+        function hideRollNoGuide() {
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.classList.remove('show');
+                setTimeout(() => overlay.style.display = 'none', 200);
+            }
         }
         
-        // Try to fetch user's portfolio from their Drive appData
-        console.log(`[User] Loading portfolio for user: ${email}`);
-        setStatus('Loading your portfolio from Google Drive...');
-        
-        const response = await fetch(`${backendBase}/api/user-portfolio`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          credentials: 'omit',
-          cache: 'no-store'
+        // Initialize roll number guide popup
+        document.addEventListener('DOMContentLoaded', function() {
+            const okBtn = document.getElementById('rollno-guide-ok');
+            if(okBtn) {
+                okBtn.addEventListener('click', hideRollNoGuide);
+            }
+            
+            // Close popup when clicking outside
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if(e.target === overlay) {
+                        hideRollNoGuide();
+                    }
+                });
+            }
         });
         
-        if(response.ok) {
-          const portfolioData = await response.json();
-          console.log('[User] Successfully loaded portfolio from Drive');
-          
-          // Store user data for the portfolio page
-          try {
-            // Persist portfolio + auth context. If the token looks like a JWT ID token
-            // (starts with 'eyJ') persist it as idToken as well so backend receives
-            // the JWT when possible.
-            sessionStorage.setItem('userPortfolioData', JSON.stringify(portfolioData));
-            sessionStorage.setItem('userEmail', email);
-            if (token && typeof token === 'string' && token.startsWith('eyJ')) {
-              sessionStorage.setItem('idToken', token);
-            }
-            sessionStorage.setItem('userToken', token);
-            sessionStorage.setItem('isUserMode', 'true');
-          } catch(e) {
-            console.warn('[User] Could not store data in sessionStorage:', e);
-          }
-          
-          // Navigate to portfolio page with user context
-          window.location.href = 'portfolio.html?user=1&drive=1&welcome=1';
-          
-        } else if(response.status === 404) {
-          console.log('[User] User portfolio not found in Drive, loading default with sign-in enabled');
-          
-          // Store user credentials for portfolio page to enable Drive features
-          try {
-            // Persist credentials for returning to portfolio page. Prefer to store
-            // an ID token separately when the token param is a JWT.
-            sessionStorage.setItem('userEmail', email);
-            if (token && typeof token === 'string' && token.startsWith('eyJ')) {
-              sessionStorage.setItem('idToken', token);
-            }
-            sessionStorage.setItem('userToken', token);
-            sessionStorage.setItem('isUserMode', 'true');
-          } catch(e) {
-            console.warn('[User] Could not store credentials:', e);
-          }
-          
-          // Load default portfolio but with user signed in
-          window.location.href = 'portfolio.html?file=./portfolio-data.json&user=1&welcome=1';
-          
-        } else {
-          throw new Error(`Backend error: ${response.status}`);
+        // Export functions for use by portfolio.js
+        window.rollNoValidator = {
+            isValid: isValidRollNoFormat,
+            showGuide: showRollNoGuide,
+            hideGuide: hideRollNoGuide
+        };
+        
+        // Roll number format validation
+        function isValidRollNoFormat(rollNo) {
+            if (!rollNo || typeof rollNo !== 'string') return false;
+            // Format: XXX-RXX-X (3 digits, R + 2 digits, 1 letter)
+            const rollNoPattern = /^\d{3}-R\d{2}-[A-Z]$/;
+            return rollNoPattern.test(rollNo.trim().toUpperCase());
         }
         
-      } catch(err) {
-        console.error('[User] Error loading user portfolio from Drive:', err);
-        console.log('[User] Falling back to default portfolio');
-        await loadDefaultPortfolio();
-      }
+        // Show roll number format guide popup
+        function showRollNoGuide() {
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.style.display = 'flex';
+                // Add slight delay for smooth animation
+                setTimeout(() => overlay.classList.add('show'), 10);
+            }
+        }
+        
+        // Hide roll number format guide popup
+        function hideRollNoGuide() {
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.classList.remove('show');
+                setTimeout(() => overlay.style.display = 'none', 200);
+            }
+        }
+        
+        // Initialize roll number guide popup
+        document.addEventListener('DOMContentLoaded', function() {
+            const okBtn = document.getElementById('rollno-guide-ok');
+            if(okBtn) {
+                okBtn.addEventListener('click', hideRollNoGuide);
+            }
+            
+            // Close popup when clicking outside
+            const overlay = document.getElementById('rollno-guide-overlay');
+            if(overlay) {
+                overlay.addEventListener('click', function(e) {
+                    if(e.target === overlay) {
+                        hideRollNoGuide();
+                    }
+                });
+            }
+        });
+        
+        // Export functions for use by portfolio.js
+        window.rollNoValidator = {
+            isValid: isValidRollNoFormat,
+            showGuide: showRollNoGuide,
+            hideGuide: hideRollNoGuide
+        };
+        
+        // Listen for authentication updates from parent window
+        window.addEventListener('message', function(event) {
+            if(event.data && event.data.type === 'user-portfolio-data') {
+                console.log('[Portfolio] Received user portfolio data from Drive');
+                // Handle user portfolio data loading
+                if(window.app && typeof window.app.loadUserPortfolioData === 'function') {
+                    window.app.loadUserPortfolioData(event.data.data);
+                } else {
+                    // Store for later consumption
+                    window.__USER_PORTFOLIO_DATA = event.data.data;
+                    window.__USER_EMAIL = event.data.email;
+                }
+
+            } else if(event.data && event.data.type === 'admin-portfolio-data') {
+                console.log('[Portfolio] Received admin portfolio data from parent');
+
+                // Immediately hide welcome/auth overlays if requested so the admin
+                // view does not flash the welcome dialog while loading.
+                try {
+                    if (event.data.hideWelcome) {
+                        try { showWelcomeOverlay(false); } catch(_) {}
+                        try { blurPortfolio(false); } catch(_) {}
+                    }
+                } catch(_) {}
+
+                // Send confirmation back to parent window early so parent can re-enable UI
+                try {
+                    if(event.source && event.source !== window) {
+                        event.source.postMessage({
+                            type: 'admin-data-received',
+                            success: true
+                        }, '*');
+                    }
+                } catch(e) {
+                    console.warn('[Portfolio] Could not send confirmation to parent:', e);
+                }
+
+                // Handle admin portfolio data loading
+                // Mark view as admin to prevent any user-mode Drive/UI behavior from triggering
+                try { window.__VIEW_MODE = 'admin'; document.body.classList.add('admin-view'); } catch(_){ }
+
+                if(window.app && typeof window.app.normalizeLoadedData === 'function') {
+                    const normalized = window.app.normalizeLoadedData(event.data.data);
+                    // Adopt the data as early as possible
+                    try { showWelcomeOverlay(false); } catch(_) {}
+                    try { blurPortfolio(false); } catch(_) {}
+                    window.app.loadDataDirectly(normalized);
+                    // Cancel any pending default redirects or loaders
+                    try {
+                      const pre = document.getElementById('preload-status'); if(pre) pre.remove();
+                    } catch(_){ }
+                    // Mark adopted to prevent auto-loader overriding
+                    window.__ADOPTED_SPECIFIC_PORTFOLIO = true;
+                    try { localStorage.setItem('__lastPortfolioFile', 'admin-remote'); }catch(_){ }
+                } else {
+                    // Store for later consumption when app loads
+                    window.__ADMIN_PORTFOLIO_DATA = event.data.data;
+                    window.__ADMIN_FILENAME = event.data.filename;
+                }
+
+            } else if (event.data && event.data.type === 'hide-welcome') {
+                try { showWelcomeOverlay(false); } catch(_) {}
+                try { blurPortfolio(false); } catch(_) {}
+            }
+        });
+        
+        // Check for user data from sessionStorage (when navigated from index.html)
+        function checkUserMode() {
+            try {
+                // If admin view requested, skip any user-mode session checks entirely.
+                if (window.__VIEW_MODE === 'admin') {
+                    console.log('[Portfolio] Admin view active - skipping user-mode auth/session checks');
+                    return;
+                }
+                const isUserMode = sessionStorage.getItem('isUserMode');
+                const userToken = sessionStorage.getItem('userToken');
+                const userEmail = sessionStorage.getItem('userEmail');
+                const userPortfolioData = sessionStorage.getItem('userPortfolioData');
+                
+                if(isUserMode === 'true' && userEmail) {
+                    console.log('[Portfolio] User mode detected:', userEmail);
+                    
+                    // Store user credentials globally for Drive operations
+                        window.__USER_EMAIL = userEmail;
+                        window.__USER_TOKEN = userToken;
+                        // Also inform the RMU_AUTH wrapper about the current user so
+                        // periodic sign-in checks honor the signed-in state and UI
+                        // buttons remain visible.
+                        try { if (window.RMU_AUTH && typeof RMU_AUTH.setCurrentUserEmail === 'function') RMU_AUTH.setCurrentUserEmail(userEmail); } catch(_) {}
+                    window.__IS_USER_MODE = true;
+                    
+                    // Authentication will be set up by initializeGisAndGapi when gapi loads
+                    
+                    // If we have portfolio data from Drive, use it
+                    if(userPortfolioData) {
+                        try {
+                            const portfolioData = JSON.parse(userPortfolioData);
+                            window.__USER_PORTFOLIO_DATA = portfolioData;
+                            console.log('[Portfolio] User portfolio data loaded from sessionStorage');
+                        } catch(e) {
+                            console.error('[Portfolio] Failed to parse user portfolio data:', e);
+                        }
+                    }
+                    
+                    // Enable user authentication UI
+                    document.body.classList.add('user-authenticated');
+                    // Only show signed-in UI for non-admin views
+                    if (window.__VIEW_MODE !== 'admin') document.body.classList.add('signed-in'); // Show save-to-server and other auth-required buttons
+                    
+                    // Clean up sessionStorage to prevent conflicts
+                    try {
+                        sessionStorage.removeItem('userPortfolioData');
+                    } catch(e) {
+                        console.warn('[Portfolio] Could not clean sessionStorage:', e);
+                    }
+                }
+            } catch(e) {
+                console.warn('[Portfolio] Error checking user mode:', e);
+            }
+        }
+        
+        // Check immediately and after DOM loads
+    checkUserMode();
+        document.addEventListener('DOMContentLoaded', checkUserMode);
+    })();
+    </script>
+    <script>
+    // Roll number format validation (defined early for global access)
+    function isValidRollNoFormat(rollNo) {
+        console.log('[RollNo] Validating roll number:', rollNo);
+        if (!rollNo || typeof rollNo !== 'string') {
+            console.log('[RollNo] Invalid input - not a string or empty');
+            return false;
+        }
+        // Format: XXX-RXX-X (3 digits, R + 2 digits, 1 letter)
+        const rollNoPattern = /^\d{3}-R\d{2}-[A-Z]$/;
+        const normalizedInput = rollNo.trim().toUpperCase();
+        const isValid = rollNoPattern.test(normalizedInput);
+        console.log('[RollNo] Validation result:', isValid, 'for normalized input:', normalizedInput);
+        return isValid;
+    }
+
+    // Query param portfolio JSON loader shim (enhanced for reliability).
+    // If ?file=... is provided, we fetch that JSON early and store it in window.__PRELOADED_PORTFOLIO_DATA
+    // so existing PortfolioApp logic can later choose to adopt it.
+    (function(){
+        function getParam(name){
+            try { return new URLSearchParams(location.search).get(name); } catch(e){ return null; }
+        }
+    const file = getParam('file');
+        console.log('[portfolio-loader] Query param file:', file);
+        
+        if(!file) {
+            console.log('[portfolio-loader] No ?file= parameter found, using default behavior');
+            return; // fallback to existing auto loader behavior
+        }
+        
+        // AGGRESSIVE CACHE CLEARING - Ensure no previous portfolio data remains
+        // Preserve sessionStorage user-mode data if present (so Drive-loaded
+        // user data isn't wiped when navigating from the gallery). If the
+        // user has signed in and we have 'userPortfolioData', prefer it over
+        // fetching a local ?file and skip the fetch entirely.
+        try {
+            // Detect preserved user-mode payload. If the user previously signed-in
+            // (isUserMode) we should preserve their auth context (userToken, userEmail)
+            // so Drive features remain available. Only when an actual preloaded
+            // portfolio JSON is present do we adopt and skip the fetch entirely.
+            const preservedIsUserMode = sessionStorage.getItem('isUserMode') === 'true';
+            const preservedUserData = sessionStorage.getItem('userPortfolioData');
+            const preservedUserEmail = sessionStorage.getItem('userEmail');
+            const preservedUserToken = sessionStorage.getItem('userToken');
+
+            if (preservedIsUserMode) {
+                // If we have the actual portfolio payload saved in sessionStorage,
+                // restore it and immediately dispatch the ready event so adoption
+                // proceeds without network fetch.
+                if (preservedUserData) {
+                    console.log('[portfolio-loader] Detected user-mode portfolio in sessionStorage - preserving and using it instead of fetching ?file');
+                    try {
+                        window.__PRELOADED_PORTFOLIO_DATA = JSON.parse(preservedUserData);
+                    } catch (e) {
+                        console.warn('[portfolio-loader] Failed to parse preserved user portfolio data:', e);
+                    }
+                    // Do not clear sessionStorage (preserve auth context), but clear localStorage to avoid UI contamination
+                    try { localStorage.clear(); } catch(_) {}
+                    // Signal that data is ready so adoption logic can pick it up
+                    window.dispatchEvent(new CustomEvent('portfolio_data_ready'));
+                    console.log('[portfolio-loader] Dispatched portfolio_data_ready for preserved user data');
+                    // Skip the aggressive fetch path - return early from this loader
+                    return;
+                }
+
+                // No payload saved, but user-mode auth exists: preserve auth keys so
+                // GIS/gapi can reuse tokens and show Drive buttons. Clear only
+                // localStorage (UI caches) but keep sessionStorage intact.
+                try { localStorage.clear(); } catch(_) {}
+                // Restore lightweight globals for adoption and auth helpers
+                if (preservedUserEmail) window.__USER_EMAIL = preservedUserEmail;
+                if (preservedUserToken) window.__USER_TOKEN = preservedUserToken;
+                window.__IS_USER_MODE = true;
+                // Inform RMU_AUTH if available so UI toggles that rely on it work
+                try { if (window.RMU_AUTH && typeof RMU_AUTH.setCurrentUserEmail === 'function') RMU_AUTH.setCurrentUserEmail(preservedUserEmail); } catch(_) {}
+                console.log('[portfolio-loader] Preserved user auth context from sessionStorage - continuing to fetch requested file');
+            } else {
+                // No user-mode; clear both storages to ensure a clean slate
+                localStorage.clear();
+                sessionStorage.clear();
+                delete window.__PRELOADED_PORTFOLIO_DATA;
+                delete window.app;
+                console.log('[portfolio-loader] ✓ Cleared all cache and previous data');
+            }
+        } catch(e) { console.warn('[portfolio-loader] Cache clearing error:', e); }
+        
+        // Mark that we're loading a specific file to prevent repo override
+        window.__LOADING_SPECIFIC_FILE = true;
+        window.__CURRENT_PORTFOLIO_FILE = file;
+        
+                // Show blocking centered loading indicator & hide content until adoption
+                const pre = document.createElement('div');
+                pre.id = 'preload-status';
+                pre.textContent = `Loading ${file.replace('data/', '')}...`;
+                pre.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;padding:18px 30px;border:1px solid #c9d4e2;border-radius:18px;font:600 14px Inter,system-ui,sans-serif;z-index:10001;box-shadow:0 8px 32px -8px rgba(0,0,0,.25);letter-spacing:.5px;';
+                document.addEventListener('DOMContentLoaded',()=>{
+                    document.body.appendChild(pre);
+                    document.querySelectorAll('.section').forEach(s=>{ s.style.visibility='hidden'; });
+                });
+        
+        // Fetch the specific portfolio file with aggressive cache-busting
+        const cacheBuster = Date.now();
+        const fileUrl = file.includes('?') ? `${file}&cb=${cacheBuster}` : `${file}?cb=${cacheBuster}`;
+        
+        // Add overall timeout to prevent infinite loading
+        // If admin remote mode, do not auto-redirect to default JSON; admin data will be injected via postMessage
+        const isAdminMode = /(^|[?&])admin=1(&|$)/.test(location.search);
+        const isRemoteMode = /(^|[?&])remote=1(&|$)/.test(location.search);
+        const overallTimeout = setTimeout(() => {
+            console.error('[portfolio-loader] Overall timeout reached - falling back to default portfolio');
+            const pre = document.getElementById('preload-status');
+            if (pre) {
+                pre.textContent = 'File not found - Loading default portfolio...';
+                pre.style.background = '#fff4e6';
+            }
+            // Redirect to default portfolio after 2 seconds
+            if(!(isAdminMode && isRemoteMode)){
+              setTimeout(() => { window.location.href = 'portfolio.html?file=portfolio-data.json'; }, 2000);
+            }
+        }, 15000); // 15 second overall timeout
+        
+        (function fetchWithRetry(url, attempt=1){
+            // Add fetch timeout
+            const controller = new AbortController();
+            const fetchTimeout = setTimeout(() => controller.abort(), 8000); // 8 second per-request timeout
+            
+            fetch(url, {
+                cache:'no-store',
+                signal: controller.signal,
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
+            })
+            .then(r=>{ 
+                clearTimeout(fetchTimeout);
+                clearTimeout(overallTimeout); // Clear overall timeout on success
+                console.log('[portfolio-loader] Fetch response:', r.status, r.ok, 'attempt', attempt);
+                if(!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+                return r.json();
+            })
+            .then(data => { 
+                console.log('[portfolio-loader] Successfully loaded data from:', file);
+                console.log('[portfolio-loader] Data preview:', {
+                    achievements: data.achievements?.length || 0,
+                    reflections: data.reflections?.length || 0,
+                    name: data.name || data.title || 'No name'
+                });
+                window.__PRELOADED_PORTFOLIO_DATA = data;
+                window.dispatchEvent(new CustomEvent('portfolio_data_ready'));
+                pre.textContent = 'Portfolio loaded successfully';
+                // don't remove until adoption done; adoption will remove
+            })
+            .catch(err => { 
+                clearTimeout(fetchTimeout);
+                console.error('[portfolio-loader] Failed to load portfolio file attempt', attempt, err);
+                
+                // Handle specific error cases
+                const is404 = err.message.includes('404') || err.message.includes('Not Found');
+                const isTimeout = err.name === 'AbortError';
+                
+                if (attempt < 3 && !is404) {
+                    const delay = 300 * attempt;
+                    pre.textContent = `Retrying (${attempt})...`;
+                    setTimeout(()=>fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`, attempt+1), delay);
+                } else {
+                    clearTimeout(overallTimeout); // Clear overall timeout since we're handling the error
+                    
+                    if (is404) {
+                        pre.textContent = `File not found - Redirecting to default portfolio...`;
+                        pre.style.background = '#fff4e6';
+                        if(!(isAdminMode && isRemoteMode)){
+                          setTimeout(() => { window.location.href = 'portfolio.html?file=portfolio-data.json'; }, 2000);
+                        }
+                    } else {
+                        pre.textContent = `Failed to load ${file.replace('data/','')}`;
+                        pre.style.background = '#ffe6e6';
+                        // Offer manual retry and fallback buttons
+                        const retryBtn = document.createElement('button');
+                        retryBtn.textContent = 'Retry';
+                        retryBtn.style.cssText='margin-left:8px;padding:4px 10px;font-size:12px;border:1px solid #c33;background:#b22222;color:#fff;border-radius:6px;cursor:pointer;';
+                        retryBtn.onclick=()=>{ retryBtn.disabled=true; pre.textContent='Retrying...'; fetchWithRetry(file.includes('?')? `${file}&cb=${Date.now()}` : `${file}?cb=${Date.now()}`,1); };
+                        
+                        const fallbackBtn = document.createElement('button');
+                        fallbackBtn.textContent = 'Use Default';
+                        fallbackBtn.style.cssText='margin-left:8px;padding:4px 10px;font-size:12px;border:1px solid #06c;background:#0066cc;color:#fff;border-radius:6px;cursor:pointer;';
+                        fallbackBtn.onclick=()=>{ window.location.href = 'portfolio.html?file=portfolio-data.json'; };
+                        
+                        pre.appendChild(retryBtn);
+                        pre.appendChild(fallbackBtn);
+                    }
+                }
+            });
+        })(fileUrl,1);
+        
+        // Enhanced adoption function with better error handling
+        window.__ADOPT_PRELOADED = function(appInstance){
+            try {
+                console.log('[portfolio-loader] Attempting to adopt preloaded data...');
+                
+                if(!window.__PRELOADED_PORTFOLIO_DATA){
+                    console.warn('[portfolio-loader] No preloaded data available to adopt');
+                    return false;
+                }
+                
+                if(!appInstance || typeof appInstance.normalizeLoadedData !== 'function'){
+                    console.warn('[portfolio-loader] App instance not ready for data adoption');
+                    return false;
+                }
+                
+                const norm = appInstance.normalizeLoadedData(window.__PRELOADED_PORTFOLIO_DATA);
+                console.log('[portfolio-loader] Normalized data:', {
+                    achievements: norm.achievements?.length || 0,
+                    reflections: norm.reflections?.length || 0
+                });
+                
+                // FORCE CLEAR any existing data first (critical for template-based portfolios)
+                appInstance.achievements = [];
+                appInstance.reflections = [];
+                
+                // Apply ONLY the new data from the specific JSON file
+                appInstance.achievements = norm.achievements || [];
+                appInstance.reflections = norm.reflections || [];
+                
+                // Handle personal info and profile photo specifically for template-based files
+                if(norm.personalInfo){
+                    try { 
+                        // Normalize roll number format before saving
+                        if(norm.personalInfo.rollNo && !isValidRollNoFormat(norm.personalInfo.rollNo)) {
+                            console.log('[portfolio-loader] Normalizing invalid roll number format:', norm.personalInfo.rollNo);
+                            norm.personalInfo.rollNo = '000-R00-X';
+                        }
+                        
+                        // Clear previous personal info completely
+                        localStorage.removeItem('personalInfo');
+                        localStorage.setItem('personalInfo', JSON.stringify(norm.personalInfo));
+                        console.log('[portfolio-loader] ✓ Set personal info for:', window.__CURRENT_PORTFOLIO_FILE);
+                    } catch(e){
+                        console.warn('[portfolio-loader] Failed to save personal info:', e);
+                    }
+                }
+                
+                // Clear and reload profile photo to prevent template contamination
+                if(norm.profilePhoto) {
+                    localStorage.removeItem('profilePhoto');
+                    localStorage.setItem('profilePhoto', norm.profilePhoto);
+                } else {
+                    localStorage.removeItem('profilePhoto');
+                }
+                
+                // Force UI refresh with new data & reveal
+                if(typeof appInstance.loadPersonalInfo === 'function') appInstance.loadPersonalInfo();
+                if(typeof appInstance.renderAchievements === 'function') appInstance.renderAchievements();
+                if(typeof appInstance.renderReflections === 'function') appInstance.renderReflections();
+                if(typeof appInstance.updateLinkedAchievements === 'function') appInstance.updateLinkedAchievements();
+                document.querySelectorAll('.section').forEach(s=>{ s.style.visibility='visible'; });
+                document.body.classList.remove('loading-initial');
+                // Remove loader panel now
+                const preEl = document.getElementById('preload-status'); if (preEl) preEl.remove();
+                
+                console.log('[portfolio-loader] ✓ Successfully adopted preloaded JSON from ?file=', file);
+                // Mark global flag so repo auto-loader will not override this data
+                window.__ADOPTED_SPECIFIC_PORTFOLIO = true;
+                // Persist sentinel so BFCache restores can detect mismatch and re-fetch
+                try { localStorage.setItem('__lastPortfolioFile', file); } catch(_){}
+                // In case constructor deferred rendering, ensure immediate UI update (already done above)
+                document.querySelectorAll('.section').forEach(s=>{ s.style.visibility='visible'; });
+                document.body.classList.remove('loading-initial');
+                const preEl2 = document.getElementById('preload-status'); if (preEl2) preEl2.remove();
+                return true;
+                
+            } catch(e){ 
+                console.error('[portfolio-loader] Adoption error:', e);
+                return false;
+            }
+        };
+
+                // Adoption retry logic when data becomes ready but app not yet constructed
+                let adoptionAttempts = 0;
+                function tryAdoptLoop(){
+                    if (window.app && typeof window.__ADOPT_PRELOADED==='function' && window.__PRELOADED_PORTFOLIO_DATA){
+                        const ok = window.__ADOPT_PRELOADED(window.app);
+                        if (ok) { console.log('[portfolio-loader] Adoption loop success'); return; }
+                    }
+                    if (adoptionAttempts < 40) { // ~6s (40*150ms)
+                        adoptionAttempts++; setTimeout(tryAdoptLoop,150);
+                    } else {
+                        console.warn('[portfolio-loader] Adoption timed out. Showing retry control.');
+                        const preEl = document.getElementById('preload-status');
+                        if (preEl) {
+                            preEl.textContent='Data loaded but adoption pending...';
+                            const r=document.createElement('button');
+                            r.textContent='Force Adopt';
+                            r.style.cssText='margin-left:10px;padding:4px 10px;font-size:12px;border:1px solid #0a66c2;background:#0a66c2;color:#fff;border-radius:6px;cursor:pointer;';
+                            r.onclick=()=>{ adoptionAttempts=0; preEl.textContent='Retrying adoption...'; tryAdoptLoop(); };
+                            preEl.appendChild(r);
+                        }
+                    }
+                }
+                window.addEventListener('portfolio_data_ready', ()=>{ console.log('[portfolio-loader] portfolio_data_ready event'); tryAdoptLoop(); });
+
+                // BFCache / back-forward navigation handling:
+        // If user visits file A, then file B (which clears storage), then navigates back to A (BFCache restore),
+        // the DOM shows A but localStorage reflects B. Detect and force a re-fetch so A's real data returns instantly.
+        window.addEventListener('pageshow', function(e){
+            if(!file) return;
+            let stored = null;
+            try { stored = localStorage.getItem('__lastPortfolioFile'); } catch(_){ }
+            const mismatch = (stored && stored !== file);
+            if (e.persisted || mismatch) {
+                console.log('[portfolio-loader] pageshow detected', { persisted:e.persisted, stored, expected:file, mismatch });
+                // Re-fetch with fresh cache buster and re-adopt
+                const refetchUrl = file.includes('?') ? `${file}&bf=${Date.now()}` : `${file}?bf=${Date.now()}`;
+                fetch(refetchUrl, { cache:'no-store', headers:{'Cache-Control':'no-cache, no-store, must-revalidate','Pragma':'no-cache','Expires':'0'} })
+                  .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+                  .then(data => {
+                      console.log('[portfolio-loader] BFCache/mismatch refetch success');
+                      window.__PRELOADED_PORTFOLIO_DATA = data;
+                      if (window.app && typeof window.__ADOPT_PRELOADED === 'function') {
+                          window.__ADOPT_PRELOADED(window.app);
+                      }
+                  })
+                  .catch(err=>console.warn('[portfolio-loader] BFCache refetch failed', err));
+            }
+        });
+    })();
+    </script>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="nav-brand">
+                <h1>Rawalpindi Medical University</h1>
+                <p>Abdul Haseeb Ahmad</p>
+                <!-- Build/version stamp to help confirm deployed changes -->
+                <div id="build-version" style="font-size:12px;color:var(--muted-foreground);margin-top:4px;">v2025.09.25-1</div>
+            </div>
+            <nav class="nav-menu">
+                <button class="nav-item active" data-section="personal">Personal Info</button>
+                <button class="nav-item" data-section="descriptive">Descriptive Portfolio</button>
+                <button class="nav-item" data-section="reflective">Reflective Portfolio</button>
+                <button id="export-pdf" class="nav-item" title="Export visible portfolio to PDF">Export to PDF</button>
+                <button id="save-to-server" class="nav-item rmu-save-btn" title="Save portfolio to server" style="display:none;">
+                    💾 Save to Server
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div id="initial-status" style="position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font:600 16px Inter,system-ui,sans-serif;color:#444;background:#fff;padding:18px 26px;border:1px solid #d0d7df;border-radius:14px;box-shadow:0 6px 28px -10px rgba(0,0,0,.15);z-index:9998;display:none;">
+            Loading portfolio data...
+        </div>
+        <!-- Personal Information Section -->
+        <section id="personal" class="section active">
+            <div class="container">
+                <div class="rmu-portfolio-container">
+                    <!-- Modern 3-Column Layout -->
+                    <div class="rmu-modern-layout">
+                        <!-- Edit Controls -->
+                        <div class="rmu-edit-controls">
+                            <button class="rmu-edit-button" id="edit-personal">Edit</button>
+                            <button id="save-personal" class="rmu-save-button" style="display:none;">Save</button>
+                            <button id="cancel-personal" class="rmu-cancel-button" style="display:none;">Cancel</button>
+                        </div>
+                        
+                        <!-- Main Content Area (Left 2 Columns) -->
+                        <div class="rmu-content-area">
+                            <!-- Header Section with Logo and Title -->
+                            <div class="rmu-header-modern">
+                                <div class="rmu-logo-section">
+                                    <img src="RMUlogo.png" alt="RMU Logo" class="rmu-logo-modern">
+                                    <div class="rmu-title-modern">
+                                        <div class="rmu-editable-field rmu-portfolio-title" data-field="title">
+                                            <span id="title-display">Abdul Haseeb's Medfolio</span>
+                                            <input type="text" id="title" value="Abdul Haseeb's Medfolio" style="display:none;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Personal Information Fields (2 Columns) -->
+                            <div class="rmu-fields-container">
+                                <!-- Left Column -->
+                                <div class="rmu-field-column">
+                                    <div class="rmu-field">
+                                        <label class="rmu-field-label">Student Name</label>
+                                        <div class="rmu-editable-field rmu-student-name" data-field="studentName">
+                                            <span id="firstName-display">Abdul Haseeb Ahmad</span>
+                                            <input type="text" id="firstName" value="Abdul Haseeb Ahmad" style="display:none;">
+                                        </div>
+                                    </div>
+
+                                    <div class="rmu-field">
+                                        <label class="rmu-field-label">Roll No</label>
+                                        <div class="rmu-editable-field rmu-detail-text" data-field="rollNo">
+                                            <span id="rollNo-display">123</span>
+                                            <input type="text" id="rollNo" value="123" style="display:none;">
+                                        </div>
+                                    </div>
+
+                                    <div class="rmu-field">
+                                        <label class="rmu-field-label">Registration No</label>
+                                        <div class="rmu-editable-field rmu-small-detail-text" data-field="registrationNo">
+                                            <span id="registrationNo-display">RMU-MBBS-2024-001</span>
+                                            <input type="text" id="registrationNo" value="RMU-MBBS-2024-001" style="display:none;">
+                                        </div>
+                                    </div>
+
+                                    <div class="rmu-field">
+                                        <label class="rmu-field-label">Program Enrolled</label>
+                                        <div class="rmu-editable-field rmu-small-detail-text" data-field="programEnrolled">
+                                            <span id="programEnrolled-display">MBBS</span>
+                                            <input type="text" id="programEnrolled" value="MBBS" style="display:none;">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Right Column -->
+                                <div class="rmu-field-column">
+                                    <div class="rmu-field">
+                                        <label class="rmu-field-label">Father's Name</label>
+                                        <div class="rmu-editable-field rmu-student-name" data-field="fatherName">
+                                            <span id="fatherName-display">Muhammad Athar</span>
+                                            <input type="text" id="fatherName" value="Muhammad Athar" style="display:none;">
+                                        </div>
+                                    </div>
+
+                                    <div class="rmu-field">
+                                        <label class="rmu-field-label">Email</label>
+                                        <div class="rmu-editable-field rmu-small-detail-text" data-field="email">
+                                            <span id="email-display">abdul.haseeb@student.rmu.edu.pk</span>
+                                            <input type="email" id="email" value="abdul.haseeb@student.rmu.edu.pk" style="display:none;">
+                                        </div>
+                                    </div>
+
+                                    <div class="rmu-field">
+                                        <label class="rmu-field-label">Mobile No</label>
+                                        <div class="rmu-editable-field rmu-small-detail-text" data-field="mobileNo">
+                                            <span id="phone-display">+92 300 1234567</span>
+                                            <input type="tel" id="phone" value="+92 300 1234567" style="display:none;">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="rmu-field">
+                                        <label class="rmu-field-label">Session</label>
+                                        <div class="rmu-editable-field rmu-small-detail-text" data-field="session">
+                                            <span id="session-display">2024-25</span>
+                                            <input type="text" id="session" value="2024-25" style="display:none;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Professional Bio Section (Full Width) -->
+                            <div class="rmu-bio-section-modern">
+                                <h3 class="rmu-bio-title">Professional Bio</h3>
+                                <div class="rmu-editable-field rmu-bio-content" data-field="professionalBio">
+                                    <span id="bio-display">Passionate medical student dedicated 1. To impart evidence based research oriented medical education. 2. To provide best possible patient care. 3. To inculcate the values of mutual respect and ethical practice of medicine.</span>
+                                    <textarea id="bio" rows="4" style="display:none;">Passionate medical student dedicated 1. To impart evidence based research oriented medical education. 2. To provide best possible patient care. 3. To inculcate the values of mutual respect and ethical practice of medicine.</textarea>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Profile Picture Column (Right) -->
+                        <div class="rmu-profile-column">
+                            <div class="rmu-profile-picture-modern">
+                                <img src="profile.png" alt="Profile" class="rmu-profile-img-modern">
+                                <input type="file" id="profile-photo-input" accept="image/*" style="display:none;" />
+                                <button id="change-photo" class="rmu-change-photo-btn-modern" style="display:none;">
+                                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                        <circle cx="12" cy="13" r="4"/>
+                                    </svg>
+                                    Change Photo
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="rmu-footer"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Descriptive Portfolio Section -->
+        <section id="descriptive" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <div>
+                        <h2>Descriptive Portfolio</h2>
+                        <p>Academic achievements, clinical experiences, and professional development</p>
+                    </div>
+                    <div class="section-actions">
+                        <div class="search-container">
+                            <input type="text" id="search-descriptive" placeholder="Search achievements..." class="search-input">
+                            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                        </div>
+                        <!-- Category bar: full-width pill bar with dividers. On mobile, show a compact UI: one 'All' pill + a dropdown to pick other categories -->
+                        <div id="descriptive-categories" class="category-bar-wrapper">
+                            <button class="descriptive-category active" data-category="" aria-pressed="true">
+                                <svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                                <span>All</span>
+                            </button>
+                            <button class="descriptive-category" data-category="academic">
+                                <svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M12 2l9 4-9 4-9-4 9-4z"/><path d="M3 10v4a9 9 0 0 0 18 0v-4"/></svg>
+                                <span>Academics</span>
+                            </button>
+                            <button class="descriptive-category" data-category="clinical">
+                                <svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M20 8v6a6 6 0 0 1-12 0V8"/><path d="M16 6a4 4 0 1 0-8 0v2"/><path d="M12 14v6"/></svg>
+                                <span>Clinical</span>
+                            </button>
+                            <button class="descriptive-category" data-category="extracurricular">
+                                <svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                <span>Extracurricular</span>
+                            </button>
+                            <button class="descriptive-category" data-category="research">
+                                <svg class="category-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M6 3h12l-2 7a6 6 0 0 1-8 0L6 3z"/><path d="M8 14h8"/></svg>
+                                <span>Research</span>
+                            </button>
+                            <!-- Mobile-only select: hidden on desktop, visible on small screens -->
+                            <select id="mobile-descriptive-select" class="mobile-descriptive-select" aria-label="Choose category (mobile)">
+                                <option value="">All</option>
+                                <option value="academic">Academics</option>
+                                <option value="clinical">Clinical</option>
+                                <option value="extracurricular">Extracurricular</option>
+                                <option value="research">Research</option>
+                            </select>
+                        </div>
+                        <button id="add-achievement" class="btn btn-primary">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            Add Achievement
+                        </button>
+                    </div>
+                </div>
+
+                <div class="achievements-grid" id="achievements-container">
+                    <!-- Achievements will be populated by JavaScript -->
+                </div>
+                <!-- Category summary cards (4 equal rectangles) -->
+                <div id="category-cards" class="category-cards" aria-hidden="false">
+                    <div class="cat-card" data-key="academic">
+                        <div class="cat-icon" aria-hidden="true">
+                            <!-- nicer school / graduation cap icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L1 7l11 5 9-4.09V17a2 2 0 0 1-2 2h-2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 22v-9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                        <div class="cat-count">0</div>
+                        <div class="cat-label">Academics</div>
+                    </div>
+                    <div class="cat-card" data-key="clinical">
+                        <div class="cat-icon" aria-hidden="true">
+                            <!-- nicer stethoscope icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20 8v6a6 6 0 0 1-12 0V8" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 8V5a2 2 0 0 1 2-2h6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                        <div class="cat-count">0</div>
+                        <div class="cat-label">Clinical</div>
+                    </div>
+                    <div class="cat-card" data-key="extracurricular">
+                        <div class="cat-icon" aria-hidden="true">
+                            <!-- people / activities icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="7" r="4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                        <div class="cat-count">0</div>
+                        <div class="cat-label">Extracurricular</div>
+                    </div>
+                    <div class="cat-card" data-key="research">
+                        <div class="cat-icon" aria-hidden="true">
+                            <!-- microscope / research icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M6 3h12l-2 7a6 6 0 0 1-8 0L6 3z" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 14h6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                        <div class="cat-count">0</div>
+                        <div class="cat-label">Research</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reflective Portfolio Section -->
+        <section id="reflective" class="section">
+            <div class="container">
+                <div class="section-header">
+                    <div>
+                        <h2>Reflective Portfolio</h2>
+                        <p>Personal reflections, learning experiences, and professional growth</p>
+                    </div>
+                    <div class="section-actions">
+                        <div class="search-container">
+                            <input type="text" id="search-reflective" placeholder="Search reflections..." class="search-input">
+                            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <circle cx="11" cy="11" r="8"/>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                            </svg>
+                        </div>
+                        <select id="filter-reflective" class="filter-select">
+                            <option value="">All Moods</option>
+                            <option value="positive">Positive</option>
+                            <option value="challenging">Challenging</option>
+                            <option value="neutral">Neutral</option>
+                        </select>
+                        <button id="add-reflection" class="btn btn-primary">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            Add Reflection
+                        </button>
+                    </div>
+                </div>
+
+                <div class="reflections-container" id="reflections-container">
+                    <!-- Reflections will be populated by JavaScript -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modals -->
+    <div id="achievement-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="achievement-modal-title">Add Achievement</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="achievement-form">
+                    <div class="form-group">
+                        <label for="achievement-title">Title</label>
+                        <input type="text" id="achievement-title" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="achievement-category">Category</label>
+                            <select id="achievement-category" required>
+                            <option value="">Select Category</option>
+                            <option value="academic">Academics</option>
+                            <option value="clinical">Clinical</option>
+                            <option value="extracurricular">Extracurricular</option>
+                            <option value="research">Research</option>
+                            <option value="certification">Certification</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="achievement-date">Date</label>
+                        <input type="date" id="achievement-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="achievement-description">Description</label>
+                        <textarea id="achievement-description" rows="4"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="achievement-image">Images (optional, you may select multiple)</label>
+                        <input type="file" id="achievement-image" accept="image/*" multiple>
+                    </div>
+                    <div class="form-group">
+                        <label for="achievement-ppt">PowerPoint (PPT, optional)</label>
+                        <input type="file" id="achievement-ppt" accept=".ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation">
+                    </div>
+                    <div class="form-group">
+                        <label for="achievement-pdf">PDF (optional)</label>
+                        <input type="file" id="achievement-pdf" accept="application/pdf">
+                    </div>
+                    <div class="form-group">
+                        <label for="achievement-status">Status</label>
+                        <select id="achievement-status" required>
+                            <option value="completed">Completed</option>
+                            <option value="in-progress">In Progress</option>
+                            <option value="planned">Planned</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline modal-cancel">Cancel</button>
+                <button type="submit" form="achievement-form" class="btn btn-primary">Save Achievement</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="reflection-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="reflection-modal-title">Add Reflection</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="reflection-form">
+                    <div class="form-group">
+                        <label for="reflection-title">Title</label>
+                        <input type="text" id="reflection-title" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-date">Date</label>
+                        <input type="date" id="reflection-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-mood">Mood</label>
+                        <select id="reflection-mood" required>
+                            <option value="">Select Mood</option>
+                            <option value="positive">Positive</option>
+                            <option value="challenging">Challenging</option>
+                            <option value="neutral">Neutral</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-content">Reflection Content</label>
+                        <textarea id="reflection-content" rows="8" placeholder="Write your thoughts and reflections..." required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-image">Images (optional, you may select multiple)</label>
+                        <input type="file" id="reflection-image" accept="image/*" multiple>
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-ppt">PowerPoint (PPT, optional)</label>
+                        <input type="file" id="reflection-ppt" accept=".ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation">
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-pdf">PDF (optional)</label>
+                        <input type="file" id="reflection-pdf" accept="application/pdf">
+                    </div>
+                    <div class="form-group">
+                        <label for="reflection-linked">Link to Achievement</label>
+                        <select id="reflection-linked">
+                            <option value="">No linked achievement</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline modal-cancel">Cancel</button>
+                <button type="submit" form="reflection-form" class="btn btn-primary">Save Reflection</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- html2canvas and jsPDF for client-side export to PDF (load libraries first) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="portfolio.js?v=20250925.3"></script>
+    <script>
+    // After portfolio.js constructed the global app, adopt any preloaded JSON (if ?file= present) without breaking Drive logic.
+    (function(){
+        function tryAdopt() {
+            if(window.app && typeof window.__ADOPT_PRELOADED === 'function'){
+                console.log('[portfolio-loader] App ready, attempting adoption...');
+                const success = window.__ADOPT_PRELOADED(window.app);
+                if(success) {
+                    console.log('[portfolio-loader] ✓ Data adoption successful');
+                } else {
+                    console.log('[portfolio-loader] ⚠ Data adoption failed or no data to adopt');
+                }
+            } else {
+                console.log('[portfolio-loader] App or adoption function not ready yet, retrying...');
+                setTimeout(tryAdopt, 100); // retry in 100ms
+            }
+        }
+        
+        // Try immediately, then retry if needed
+        setTimeout(tryAdopt, 50);
+    })();
+    </script>
+    <script>
+        // Debug helper: list CSS/JS hrefs and explicitly report whether the expected files loaded
+        (async function(){
+            try{
+                const cssLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(l=>l.href);
+                const scriptSrcs = Array.from(document.querySelectorAll('script[src]')).map(s=>s.src);
+                const stamp = document.getElementById('build-version');
+
+                const portfolioCssHref = cssLinks.find(h=>h && h.includes('portfolio.css')) || null;
+                const portfolioJsHref = scriptSrcs.find(s=>s && s.includes('portfolio.js')) || null;
+
+                if (stamp) {
+                    // Keep the visible stamp short and user-friendly; send full details to console
+                    const cssStatus = portfolioCssHref ? 'OK' : 'MISSING';
+                    const jsStatus = portfolioJsHref ? 'OK' : 'MISSING';
+                    stamp.textContent = `${stamp.textContent} | CSS: ${cssStatus} | JS: ${jsStatus}`;
+                }
+
+                // Full debug details remain in console for developers
+                console.debug('Debug: Loaded CSS links:', cssLinks);
+                console.debug('Debug: Loaded script sources:', scriptSrcs);
+                console.debug('Debug: portfolio.css presence (full href):', portfolioCssHref);
+                console.debug('Debug: portfolio.js presence (full src):', portfolioJsHref);
+
+                if (stamp) {
+                  stamp.textContent += ' | mode: external-json-only';
+                }
+
+            } catch (e) {
+                console.warn('debug helper failed', e);
+            }
+        })();
+    </script>
+<!-- Auth status UI for GIS -->
+<div id="auth-status" style="position:fixed;top:10px;right:180px;z-index:9999;background:#fff;padding:6px;border:1px solid #ccc;border-radius:6px;display:none;font-size:13px;"></div>
+<!-- Global Loading Bar (styles provided in portfolio.css) -->
+<div id="global-loading-bar"><div class="glb-progress"></div></div>
+<button id="authorize_button" style="display:block;position:fixed;top:10px;right:10px;z-index:9999;padding: 5px;">Sign in with Google</button>
+<button id="signout_button" style="display:none;position:fixed;top:40px;right:10px;z-index:9999;">Sign out</button>
+<button id="save-drive" onclick="app.saveToDrive()" style="display:none;position:fixed;top:70px;right:10px;z-index:9999;">Save to Drive</button>
+<button id="load-drive" onclick="app.loadFromDrive()" style="display:none;position:fixed;top:100px;right:10px;z-index:9999;">Load from Drive</button>
+<button id="export-json" onclick="app.exportPortfolioJson()" style="display:none;position:fixed;top:130px;right:10px;z-index:9999;">Export JSON</button>
+<button id="import-json" onclick="document.getElementById('import-json-input').click()" style="display:none;position:fixed;top:160px;right:10px;z-index:9999;">Import JSON</button>
+<input type="file" id="import-json-input" accept="application/json" style="display:none" />
+<button id="drive-selftest" onclick="app.runDriveSelfTest()" style="display:none;position:fixed;top:190px;right:10px;z-index:9999;">Test Drive Sync</button>
+<script>
+// Google Identity Services (GIS) + gapi.client integration
+// CLIENT_ID and SCOPES are read lazily inside initializeGisAndGapi to avoid
+// a timing issue where inline scripts run before deferred `config.js` sets
+// `window.RMU_CONFIG`. Reading them early caused GIS to be disabled for
+// user-mode sign-ins. This preserves all behavior but fixes the missing
+// CLIENT_ID console error and re-enables Drive auth for users.
+let tokenClient;
+let accessToken = null;
+
+function gisHandleResponse(resp) {
+    console.log('GIS response', resp);
+}
+
+function initializeGisAndGapi() {
+    // Read client ID and scopes at the time of initialization (defer-safe)
+    const CLIENT_ID = (window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID)
+        || (typeof window.GOOGLE_CLIENT_ID !== 'undefined' ? window.GOOGLE_CLIENT_ID : '');
+    const SCOPES = (window.RMU_CONFIG && window.RMU_CONFIG.OAUTH_SCOPES)
+        || 'https://www.googleapis.com/auth/drive.appdata';
+
+    try {
+        const masked = CLIENT_ID ? CLIENT_ID.replace(/(.{6}).+(.{6})/, '$1…$2') : '(missing)';
+        console.info('[GIS] Resolved CLIENT_ID:', masked);
+    } catch (e) { /* non-blocking */ }
+
+    const existingUserToken = sessionStorage.getItem('userToken');
+    const isUserMode = sessionStorage.getItem('isUserMode');
+
+    // If admin view is active, avoid registering any interactive Drive UI
+    if (window.__VIEW_MODE === 'admin') {
+        console.log('[GIS] Admin view detected - skipping GIS token client initialization');
+        try { document.getElementById('authorize_button').style.display = 'none'; } catch (e) { }
+        // still initialize a minimal poll so any later attempts are harmless
+    } else {
+        // If no client id is configured, hide auth UI and do not create token client
+        if (!CLIENT_ID) {
+            console.error('[GIS] CLIENT_ID missing. Google auth will be disabled. Set RMU_CONFIG.GOOGLE_CLIENT_ID');
+            try { document.getElementById('authorize_button').style.display = 'none'; } catch (e) { }
+        } else {
+            // Create the GIS token client for user interactive sign-in
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: async (tokenResponse) => {
+                        if (tokenResponse.error) {
+                            console.error('Token error', tokenResponse);
+                            return;
+                        }
+                        accessToken = tokenResponse.access_token;
+                    // Apply token to gapi.client if ready
+                    if (window.gapi && gapi.client && typeof gapi.client.setToken === 'function') {
+                        gapi.client.setToken({ access_token: accessToken });
+                        console.log('[GIS] Access token set on gapi.client');
+                    } else {
+                        console.warn('[GIS] gapi.client not ready when token received');
+                    }
+
+                    if (window.__VIEW_MODE !== 'admin') updateAuthUIStateGIS(true);
+                    try {
+                        // If the access token happens to be an ID token (JWT) store it
+                        // explicitly as idToken as well to prioritize JWT usage server-side.
+                        if (accessToken && typeof accessToken === 'string' && accessToken.startsWith('eyJ')) {
+                            try { sessionStorage.setItem('idToken', accessToken); } catch(_){ }
+                        }
+                        sessionStorage.setItem('userToken', accessToken);
+                        sessionStorage.setItem('isUserMode', 'true');
+                    } catch (e) { console.warn('[GIS] Could not persist token', e); }
+
+                                        // If we don't already have an ID token (JWT), try to request one via GSI.
+                                        try {
+                                            const existingId = sessionStorage.getItem('idToken');
+                                            if (!existingId && window.google && google.accounts && google.accounts.id) {
+                                                try {
+                                                    // Initialize the ID token flow (safe to call multiple times)
+                                                    google.accounts.id.initialize({
+                                                        client_id: CLIENT_ID,
+                                                        callback: (resp) => {
+                                                            if (resp && resp.credential) {
+                                                                try { sessionStorage.setItem('idToken', resp.credential); } catch(_){}
+                                                                console.log('[GIS] Received ID token via prompt (stored idToken preview).');
+                                                            }
+                                                        }
+                                                    });
+                                                    // Prompt (may be silent if already approved)
+                                                    google.accounts.id.prompt();
+                                                } catch(_err) { console.debug('[GIS] id prompt attempt failed:', _err && _err.message); }
+                                            }
+                                        } catch(_) {}
+
+                    // Attempt auto-load (user mode only)
+                    try {
+                        if (window.__VIEW_MODE !== 'admin' && window.app && typeof window.app.loadFromDrive === 'function') {
+                            console.log('[GIS] Auto-loading user portfolio from appDataFolder...');
+                            await window.app.loadFromDrive();
+                        }
+                    } catch (e) {
+                        console.warn('[GIS] Auto-load on sign-in failed:', e);
+                    }
+                }
+            });
+
+            // Hook the authorize button to request token interactively
+            try {
+                document.getElementById('authorize_button').addEventListener('click', () => {
+                    if (!tokenClient) { console.error('tokenClient not ready'); return; }
+                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                });
+            } catch (e) { /* ignore missing UI in some embed scenarios */ }
+        }
+    }
+
+    // Sign-out handler (works regardless of admin/user mode; will be no-op if no token)
+    try {
+        document.getElementById('signout_button').addEventListener('click', () => {
+            if (accessToken) {
+                fetch('https://oauth2.googleapis.com/revoke?token=' + accessToken, { method: 'POST', headers: { 'Content-type': 'application/x-www-form-urlencoded' } })
+                    .then(() => {
+                        accessToken = null;
+                        if (window.gapi && gapi.client && typeof gapi.client.setToken === 'function') {
+                            gapi.client.setToken({});
+                        }
+                        updateAuthUIStateGIS(false);
+                        console.log('Access token revoked');
+                    }).catch(e => { console.error('Revoke error', e); });
+            }
+        });
+    } catch (e) { /* ignore missing UI */ }
+
+    // Initialize gapi.client and apply any existing token for returning users
+    try {
+        gapi.load('client', async () => {
+            try {
+                await gapi.client.init({});
+                console.log('gapi.client initialized');
+
+                if (window.__VIEW_MODE !== 'admin' && isUserMode === 'true' && existingUserToken) {
+                    console.log('[Auth] User mode detected with existing token');
+                    accessToken = existingUserToken;
+                    if (typeof gapi.client.setToken === 'function') {
+                        gapi.client.setToken({ access_token: accessToken });
+                        console.log('[Auth] User token from sessionStorage set on gapi.client');
+                    }
+                    window.accessToken = accessToken;
+                    if (window.__VIEW_MODE !== 'admin') updateAuthUIStateGIS(true);
+
+                    setTimeout(() => {
+                        try {
+                            if (window.__VIEW_MODE !== 'admin' && window.app && typeof window.app.loadFromDrive === 'function') {
+                                console.log('[Auth] Auto-loading portfolio after gapi init (return visit)');
+                                window.app.loadFromDrive();
+                            }
+                        } catch (e) { console.warn('[Auth] Auto-load after init failed:', e && e.message); }
+                    }, 400);
+                }
+            } catch (e) {
+                console.error('gapi.client.init error', e);
+            }
+        });
+    } catch (e) { console.warn('[GIS] gapi.load failed', e); }
+
+    // Poll to detect tokens set by other flows and update UI accordingly
+    const poll = setInterval(() => {
+        try {
+            if (window.gapi && gapi.client && typeof gapi.client.getToken === 'function') {
+                const token = gapi.client.getToken();
+                if (token && token.access_token) {
+                    accessToken = token.access_token;
+                    if (window.__VIEW_MODE !== 'admin') updateAuthUIStateGIS(true);
+                    clearInterval(poll);
+                }
+            }
+        } catch (e) { }
+    }, 700);
+}
+
+function updateAuthUIStateGIS(signedIn) {
+    const statusDiv = document.getElementById('auth-status');
+    const authBtn = document.getElementById('authorize_button');
+    const signOutBtn = document.getElementById('signout_button');
+    const saveBtn = document.getElementById('save-drive');
+    const loadBtn = document.getElementById('load-drive');
+    const exportBtn = document.getElementById('export-json');
+    const importBtn = document.getElementById('import-json');
+    const importInput = document.getElementById('import-json-input');
+    const selftestBtn = document.getElementById('drive-selftest');
+    // Never reveal Drive/auth UI when in admin view
+    if (window.__VIEW_MODE === 'admin') {
+        console.log('[AuthUI] Admin view - suppressing Drive UI update');
+        return;
+    }
+
+    if (signedIn) {
+        if (statusDiv) { statusDiv.innerText = 'Signed in (Drive access granted)'; statusDiv.style.display = 'block'; }
+        if (authBtn) { authBtn.style.display = 'none'; }
+        if (signOutBtn) { signOutBtn.style.display = 'inline-block'; }
+        if (saveBtn) { saveBtn.style.setProperty('display','inline-block','important'); }
+        if (loadBtn) { loadBtn.style.setProperty('display','inline-block','important'); }
+        if (exportBtn) { exportBtn.style.setProperty('display','inline-block','important'); }
+        if (importBtn) { importBtn.style.setProperty('display','inline-block','important'); }
+        if (selftestBtn) { selftestBtn.style.setProperty('display','inline-block','important'); }
+        if (importInput && !importInput._bound) {
+            importInput.addEventListener('change', (e)=>{
+                const file = e.target.files && e.target.files[0];
+                if (file && window.app && typeof window.app.handleImportJsonFile === 'function') {
+                    window.app.handleImportJsonFile(file);
+                    e.target.value = '';
+                }
+            });
+            importInput._bound = true;
+        }
+        console.log('Auth UI updated: signedIn true - save/load buttons shown (forced)');
+    } else {
+        if (statusDiv) { statusDiv.style.display = 'none'; }
+        if (authBtn) { authBtn.style.display = 'block'; }
+        if (signOutBtn) { signOutBtn.style.display = 'none'; }
+        if (saveBtn) { saveBtn.style.setProperty('display','none','important'); }
+        if (loadBtn) { loadBtn.style.setProperty('display','none','important'); }
+        if (exportBtn) { exportBtn.style.setProperty('display','none','important'); }
+        if (importBtn) { importBtn.style.setProperty('display','none','important'); }
+        if (selftestBtn) { selftestBtn.style.setProperty('display','none','important'); }
+        console.log('Auth UI updated: signedIn false - save/load buttons hidden (forced)');
+    }
+}
+
+// Initialize when GIS script is ready
+window.addEventListener('load', () => {
+    console.log('window.load: waiting for GIS and gapi');
+    // Ensure RMU_CONFIG is available before attempting to initialize GIS.
+    // Prefer the 'rmu-config-ready' event (dispatched by config.js) but fall
+    // back to a short timeout to avoid blocking in unusual deploys.
+    const WAIT_CONFIG_TIMEOUT = 1200; // ms
+    let configReady = !!(window.RMU_CONFIG && window.RMU_CONFIG.GOOGLE_CLIENT_ID);
+
+    const startInitLoop = () => {
+        const check = setInterval(()=>{
+            if (window.google && google.accounts && window.gapi) {
+                console.log('GIS and gapi detected, initializing');
+                clearInterval(check);
+                initializeGisAndGapi();
+            }
+        }, 300);
+    };
+
+    if (configReady) {
+        startInitLoop();
+    } else {
+        // Wait for config.js to dispatch readiness; fallback after timeout
+        let fallback = setTimeout(()=>{
+            console.warn('[Init] rmu-config-ready not received in time - continuing initialization attempt');
+            configReady = true;
+            startInitLoop();
+        }, WAIT_CONFIG_TIMEOUT);
+
+        document.addEventListener('rmu-config-ready', () => {
+            try { clearTimeout(fallback); } catch(_){}
+            configReady = true;
+            startInitLoop();
+        }, { once: true });
+    }
+});
+</script>
+
+<!-- Authentication Modal Overlays -->
+<style>
+    .auth-overlay{position:fixed;inset:0;background:rgba(10,20,40,.55);backdrop-filter:saturate(1.1) blur(3px);display:none;align-items:center;justify-content:center;z-index:10000}
+    .auth-modal{width:min(520px,92vw);background:#fff;border-radius:16px;border:1px solid #d8e0ea;box-shadow:0 24px 64px -16px rgba(16,40,80,.35);padding:22px}
+    .auth-title{font:600 18px Inter,system-ui,sans-serif;color:#0b2340;margin:4px 0 12px}
+    .auth-desc{font:13px/1.45 Inter,system-ui,sans-serif;color:#3a4b61;margin-bottom:16px}
+    .auth-actions{display:flex;gap:10px;justify-content:flex-end}
+    .auth-btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;font:600 13px Inter,system-ui,sans-serif;cursor:pointer}
+    .auth-btn-primary{background:linear-gradient(90deg,#0a66c2,#2b79ff);color:#fff;box-shadow:0 8px 20px -8px rgba(10,70,150,.45)}
+    .auth-btn-ghost{background:#f3f6fb;color:#0b2340}
+    .auth-error{color:#b22222;background:#fff2f2;border:1px solid #f0c8c8;border-radius:10px;padding:8px 10px;font:12px Inter,system-ui,sans-serif;display:none;margin-bottom:10px}
+    .rmu-save-btn{background:linear-gradient(135deg,#6e1c17 0%,#55120f 100%) !important;color:#fff !important;border:2px solid #55120f !important;box-shadow:0 4px 12px -4px rgba(110,28,23,.4) !important;transition:all 0.3s ease !important}
+    .rmu-save-btn:hover{transform:translateY(-1px) !important;box-shadow:0 6px 16px -4px rgba(110,28,23,.5) !important;background:linear-gradient(135deg,#55120f 0%,#6e1c17 100%) !important}
+    #save-to-server{display:inline-flex;align-items:center;gap:6px}
+    body.signed-in #save-to-server{display:inline-flex !important}
+</style>
+
+<!-- Student Sign-In Modal -->
+<div id="auth-overlay" class="auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="auth-modal">
+        <div class="auth-title" id="auth-title">Sign in to save portfolio</div>
+        <div id="auth-error" class="auth-error" style="display:none"></div>
+        <div class="auth-desc">Sign in with your Google account to save your portfolio data to the server. Your data will be securely stored and accessible across devices.</div>
+        <div class="auth-actions">
+            <button id="auth-cancel" class="auth-btn auth-btn-ghost">Cancel</button>
+            <button id="auth-signin" class="auth-btn auth-btn-primary">Sign in with Google</button>
+        </div>
+    </div>
+</div>
+
+<!-- Save to Server Modal -->
+<div id="save-server-modal" class="auth-overlay" role="dialog" aria-modal="true" style="display:none">
+    <div class="auth-modal">
+        <div class="auth-title">Saving to Server</div>
+        <div id="save-server-status" class="auth-desc">Preparing to save...</div>
+        <div class="auth-actions">
+            <button id="save-server-cancel" class="auth-btn auth-btn-ghost" style="display:none">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Save to Server Integration
+(function(){
+    const saveBtn = document.getElementById('save-to-server');
+    const authOverlay = document.getElementById('auth-overlay');
+    const authError = document.getElementById('auth-error');
+    const saveModal = document.getElementById('save-server-modal');
+    const saveStatus = document.getElementById('save-server-status');
+    const saveCancel = document.getElementById('save-server-cancel');
+    
+    function showAuthOverlay(show) {
+        if(authOverlay) authOverlay.style.display = show ? 'flex' : 'none';
+    }
+    
+    function showSaveModal(show, msg) {
+        if(saveModal) saveModal.style.display = show ? 'flex' : 'none';
+        if(saveStatus && msg) saveStatus.textContent = msg;
+    }
+    
+    function setAuthError(msg) {
+        if(authError) {
+            authError.textContent = msg || '';
+            authError.style.display = msg ? 'block' : 'none';
+        }
+    }
+    
+    async function signInAndSave() {
+        try {
+            if(typeof gapi === 'undefined') {
+                setAuthError('Google API not loaded. Please refresh and try again.');
+                return;
+            }
+            
+            showAuthOverlay(false);
+            showSaveModal(true, 'Signing in...');
+            
+            // Initialize gapi.auth2 if needed
+            await new Promise(resolve => gapi.load('auth2', resolve));
+            let authInstance = gapi.auth2.getAuthInstance();
+            if(!authInstance) {
+                const config = window.RMU_CONFIG || {};
+                authInstance = await gapi.auth2.init({
+                    client_id: config.GOOGLE_CLIENT_ID || window.GOOGLE_CLIENT_ID,
+                    scope: config.OAUTH_SCOPES || 'profile email openid'
+                });
+            }
+            
+            // Sign in
+            await authInstance.signIn();
+            
+            document.body.classList.add('signed-in');
+            await performSave();
+            
+        } catch(err) {
+            console.error('Sign-in error:', err);
+            showSaveModal(false);
+            setAuthError('Sign-in failed: ' + (err.message || err));
+            showAuthOverlay(true);
+        }
+    }
+    
+    async function performSave() {
+        try {
+            const cfg = window.RMU_CONFIG || {};
+            const base = (cfg.BACKEND_BASE || '').replace(/\/$/, '');
+            
+            if(!base) {
+                throw new Error('Backend not configured. Please check config.js');
+            }
+            
+            if(!window.app) {
+                throw new Error('Portfolio not initialized');
+            }
+            
+            showSaveModal(true, 'Preparing portfolio data...');
+            
+            // Build payload
+            const personal = JSON.parse(localStorage.getItem('personalInfo') || '{}');
+            
+            // Get email from gapi.auth2
+            let email = personal.email || '';
+            if(typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
+                const authInstance = gapi.auth2.getAuthInstance();
+                const user = authInstance.currentUser.get();
+                if(user && user.isSignedIn()) {
+                    const profile = user.getBasicProfile();
+                    email = profile.getEmail() || email;
+                }
+            }
+            
+            const roll = personal.rollNo || personal.roll || '';
+            
+            // Generate standardized filename using student name and roll number
+            console.log('[Save] Generating filename from personal info:', personal);
+            
+            const studentName = personal.studentName || personal.fullName || 
+                              [personal.firstName, personal.lastName].filter(Boolean).join(' ') || '';
+            const rollNo = personal.rollNo || personal.roll || roll || '';
+            
+            console.log('[Save] Using studentName:', studentName, 'rollNo:', rollNo);
+            
+            let filename;
+            if (studentName && rollNo) {
+                // Both name and roll available - ideal format
+                const cleanName = studentName.replace(/[^A-Za-z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
+                const cleanRoll = rollNo.replace(/[^A-Za-z0-9-]/g, '').toUpperCase();
+                filename = `${cleanName}-${cleanRoll}`;
+                console.log('[Save] ✅ Generated full filename:', filename);
+            } else if (studentName) {
+                // Only name available
+                const cleanName = studentName.replace(/[^A-Za-z0-9\s]/g, '').replace(/\s+/g, '-').toLowerCase();
+                filename = `${cleanName}-portfolio`;
+                console.log('[Save] ⚠️ Generated name-only filename:', filename);
+            } else {
+                // Fallback to email-based naming
+                const emailBase = email ? email.split('@')[0] : 'unknown-user';
+                filename = rollNo ? `student-${rollNo}` : `user-${emailBase}`;
+                console.log('[Save] 🔄 Using fallback filename:', filename);
+            }
+            
+            const payload = {
+                roll: roll,
+                email: email,
+                filename: filename,
+                portfolio: {
+                    achievements: app.achievements || [],
+                    reflections: app.reflections || [],
+                    personalInfo: personal,
+                    profilePhoto: localStorage.getItem('profilePhoto') || null
+                }
+            };
+            
+            showSaveModal(true, 'Saving to server...');
+            
+                        // Acquire token for backend: prefer ID token (JWT) then fall back to access tokens.
+                        // New flow: try RMU_AUTH.getIdToken() (GSI credential JWT). If present, store as sessionStorage.idToken
+                        // so other parts can re-use it. Then fall back to legacy gapi.id_token or access_token flows.
+                        let bearerToken = null;
+                        let usedIdToken = false;
+
+                        // 1) Prefer RMU_AUTH.getIdToken() which returns a JWT (ID token starting with 'eyJ')
+                        try {
+                            if (window.RMU_AUTH && typeof RMU_AUTH.getIdToken === 'function') {
+                                try {
+                                    const idTok = await RMU_AUTH.getIdToken();
+                                    if (idTok && typeof idTok === 'string' && idTok.startsWith('eyJ')) {
+                                        bearerToken = idTok;
+                                        usedIdToken = true;
+                                        try { sessionStorage.setItem('idToken', idTok); } catch(_){}
+                                        console.log('[Save] Using ID token (JWT) from RMU_AUTH.getIdToken()');
+                                    }
+                                } catch(e) {
+                                    // silent - will fall back to other methods
+                                    console.debug('[Save] RMU_AUTH.getIdToken() did not yield an ID token:', e && e.message);
+                                }
+                            }
+                        } catch(e) { /* ignore */ }
+
+                        // 2) Next try gapi.auth2.id_token (if gapi auth2 is present and signed in)
+                        if (!bearerToken && typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance) {
+                            try {
+                                const authInstance = gapi.auth2.getAuthInstance();
+                                if (authInstance) {
+                                    const user = authInstance.currentUser.get();
+                                    if (user && user.isSignedIn && user.isSignedIn()) {
+                                        const authResponse = user.getAuthResponse();
+                                        const maybeId = authResponse.id_token || authResponse.idToken || null;
+                                        if (maybeId && typeof maybeId === 'string' && maybeId.startsWith('eyJ')) {
+                                            bearerToken = maybeId;
+                                            usedIdToken = true;
+                                            try { sessionStorage.setItem('idToken', maybeId); } catch(_){}
+                                            console.log('[Save] Using ID token (JWT) from gapi.auth2');
+                                        }
+                                    }
+                                }
+                            } catch(e) { /* ignore */ }
+                        }
+
+                        // 3) Fallback to OAuth access token already set on gapi.client
+                        if (!bearerToken && typeof gapi !== 'undefined' && gapi.client && typeof gapi.client.getToken === 'function') {
+                            try {
+                                const tok = gapi.client.getToken();
+                                if (tok && tok.access_token) {
+                                    bearerToken = tok.access_token; // OAuth access token
+                                    try { sessionStorage.setItem('userToken', bearerToken); } catch(_){}
+                                    console.log('[Save] Using OAuth access token from gapi.client');
+                                }
+                            } catch(e) { /* ignore */ }
+                        }
+
+                        // 4) Final fallback: use RMU_AUTH.authenticateUser() (legacy flow that returns an access token)
+                        if (!bearerToken && window.RMU_AUTH && typeof RMU_AUTH.authenticateUser === 'function') {
+                            try {
+                                const res = await RMU_AUTH.authenticateUser();
+                                // RMU_AUTH.authenticateUser resolves with { token, id_token, access_token }
+                                const maybeId = res?.id_token || null;
+                                const tok = res?.token || res?.access_token || null;
+                                if (maybeId && typeof maybeId === 'string' && maybeId.startsWith('eyJ')) {
+                                    bearerToken = maybeId;
+                                    try { sessionStorage.setItem('idToken', maybeId); } catch(_){ }
+                                    console.log('[Save] Using ID token from RMU_AUTH.authenticateUser()');
+                                } else if (tok) {
+                                    bearerToken = tok;
+                                    try { sessionStorage.setItem('userToken', tok); } catch(_){ }
+                                    console.log('[Save] Using OAuth access token from RMU_AUTH.authenticateUser()');
+                                }
+                            } catch(_) { /* ignore */ }
+                        }
+
+                        if(!bearerToken) {
+                                throw new Error('Unable to obtain authentication token');
+                        }
+
+            const response = await fetch(base + '/api/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + bearerToken
+                },
+                body: JSON.stringify(payload),
+                credentials: 'omit',
+                cache: 'no-store'
+            });
+            
+            if(!response.ok) {
+                const errorText = await response.text().catch(() => response.statusText);
+                throw new Error('Server error: ' + errorText);
+            }
+            
+            const result = await response.json().catch(() => ({success: false}));
+            
+            if(result && result.success) {
+                showSaveModal(true, 'Portfolio saved successfully!' + (result.fileId ? ` (ID: ${result.fileId})` : ''));
+                saveCancel.style.display = 'inline-block';
+                saveCancel.onclick = () => showSaveModal(false);
+            } else {
+                throw new Error(result.error || 'Unknown server error');
+            }
+            
+        } catch(err) {
+            console.error('Save error:', err);
+            showSaveModal(true, 'Save failed: ' + (err.message || err));
+            saveCancel.style.display = 'inline-block';
+            saveCancel.onclick = () => showSaveModal(false);
+        }
     }
     
     // Event handlers
-    elements.welcomeSignin?.addEventListener('click', signInFromWelcome);
-    elements.welcomeContinue?.addEventListener('click', continueWithoutSignIn);
-    
-    elements.adminRefresh?.addEventListener('click', loadAdminPortfolios);
-    elements.adminCancel?.addEventListener('click', () => showAdminOverlay(false));
-    elements.adminSigninConfirm?.addEventListener('click', signInFromWelcome);
-    
-    // Initialize welcome system
-    function init() {
-      console.log('[Portfolio] Initializing welcome system...');
-      console.log('[Portfolio] RMU_AUTH available:', !!window.RMU_AUTH);
-      console.log('[Portfolio] RMU_CONFIG available:', !!window.RMU_CONFIG);
-      
-      // Start with blurred portfolio and welcome modal
-      blurPortfolio(true);
-      showWelcomeOverlay(true);
-      
-      // Pre-load the first portfolio in background
-      loadDefaultPortfolioInBackground();
-      
-      // If redirected from portfolio page requesting sign-in, auto-trigger sign-in flow
-      try {
-        const qp = new URLSearchParams(location.search);
-        if (qp.get('signin') === '1') {
-          showWelcomeOverlay(true);
-          blurPortfolio(true);
-          setTimeout(() => elements.welcomeSignin?.click(), 200);
-        }
-      } catch(_) {}
-
-      // Check if already signed in
-      if(window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
-        const email = RMU_AUTH.getCurrentUserEmail();
-        console.log('[Portfolio] Already signed in as:', email);
-        
-        if(email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-          // Admin is already signed in
-          RMU_AUTH.getIdToken().then(token => {
-            if(token) {
-              adminToken = token;
-              currentUserEmail = email;
-              isSignedIn = true;
-              showWelcomeOverlay(false);
-              blurPortfolio(false);
-              enableAdminMode();
+    if(saveBtn) {
+        saveBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            // Check if already signed in
+            const isSignedIn = document.body.classList.contains('signed-in') ||
+                             (window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) ||
+                             (typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance && gapi.auth2.getAuthInstance()?.isSignedIn?.get());
+            
+            if(isSignedIn) {
+                performSave();
+            } else {
+                showAuthOverlay(true);
+                setAuthError('');
             }
-          }).catch(console.error);
-        } else {
-          // Regular user is already signed in
-          RMU_AUTH.getIdToken().then(token => {
-            if(token) {
-              adminToken = token;
-              currentUserEmail = email;
-              isSignedIn = true;
-              showWelcomeOverlay(false);
-              blurPortfolio(false);
-              hideGalleryNavigation(true);
-              loadUserPortfolioFromDrive(email, token);
-            }
-          }).catch(console.error);
-        }
-      }
-    }
-    
-    async function loadDefaultPortfolioInBackground() {
-      try {
-        // Pre-load gallery data for smooth transition
-        if(window.loadIndex) {
-          window.loadIndex();
-        }
-      } catch(err) {
-        console.log('[Portfolio] Background loading error:', err);
-      }
-    }
-    
-    // Test backend connectivity (works better on GitHub Pages)
-    async function testBackend() {
-      try {
-        const config = window.RMU_CONFIG || {};
-        const backendBase = config.BACKEND_BASE;
-        console.log('[Admin] Testing backend:', backendBase);
-        
-        if(!backendBase) {
-          console.error('[Admin] No BACKEND_BASE configured');
-          return;
-        }
-        
-        // Skip health check on localhost due to CORS
-        if(window.location.hostname === 'localhost') {
-          console.log('[Admin] Skipping backend test on localhost (CORS limitation)');
-          console.log('[Admin] Backend will work when deployed to GitHub Pages');
-          return;
-        }
-        
-        // Test the root endpoint that we know works
-        const response = await fetch(`${backendBase}/`, {
-          method: 'GET',
-          mode: 'cors',
-          cache: 'no-store'
-        }).catch(err => {
-          console.log('[Admin] Backend fetch error:', err.message);
-          return null;
         });
+    }
+    
+    document.getElementById('auth-signin')?.addEventListener('click', signInAndSave);
+    document.getElementById('auth-cancel')?.addEventListener('click', () => showAuthOverlay(false));
+    
+    // Show save button when signed in
+    function checkSignInStatus() {
+        let isSignedIn = false;
         
-        if(response) {
-          console.log('[Admin] Backend responded with status:', response.status);
-        } else {
-          console.log('[Admin] Backend connection test completed');
+        // Check RMU_AUTH first
+        if(window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
+            isSignedIn = true;
         }
-      } catch(err) {
-        console.error('[Admin] Backend test error:', err);
-      }
+        
+        // Check gapi.auth2
+        if(!isSignedIn && typeof gapi !== 'undefined' && gapi.auth2 && gapi.auth2.getAuthInstance()) {
+            const authInstance = gapi.auth2.getAuthInstance();
+            isSignedIn = authInstance.isSignedIn.get();
+        }
+        
+        if(isSignedIn) {
+            document.body.classList.add('signed-in');
+        } else {
+            document.body.classList.remove('signed-in');
+        }
     }
     
-    // Initialize when auth is ready
-    if(window.RMU_AUTH) {
-      init();
-    } else {
-      document.addEventListener('auth-ready', init);
+    // Check initial sign-in status
+    checkSignInStatus();
+    
+    // Check periodically for auth state changes
+    setInterval(checkSignInStatus, 1000);
+    
+    // Listen for auth state changes
+    document.addEventListener('auth-state-changed', (e) => {
+        // Ignore auth-state changes while in admin view to prevent Drive UI leakage
+        if (window.__VIEW_MODE === 'admin') {
+            console.log('[AuthEvent] Ignoring auth-state-changed in admin view');
+            return;
+        }
+        const signedIn = !!(e.detail && e.detail.signedIn);
+        if(signedIn) {
+            document.body.classList.add('signed-in');
+        } else {
+            document.body.classList.remove('signed-in');
+        }
+        // Also update GIS/gapi UI state if available so Drive buttons are shown
+        try { if (typeof updateAuthUIStateGIS === 'function') updateAuthUIStateGIS(signedIn); } catch(_) {}
+    });
+})();
+</script>
+
+<!-- Roll Number Format Guide Popup -->
+<div id="rollno-guide-overlay" class="rollno-guide-overlay">
+    <div class="rollno-guide-modal">
+        <div class="rollno-guide-header">
+            <div class="rollno-guide-icon">📋</div>
+            <h3 class="rollno-guide-title">Roll Number Format Guide</h3>
+        </div>
+        <div class="rollno-guide-content">
+            <p class="rollno-guide-desc">Please enter your roll number in the correct format:</p>
+            <div class="rollno-format-example">
+                <span class="rollno-format-text">123-R52-B</span>
+            </div>
+            <div class="rollno-guide-breakdown">
+                <div class="rollno-part">
+                    <span class="rollno-number">123</span>
+                    <span class="rollno-label">Your class roll number</span>
+                </div>
+                <div class="rollno-separator">-</div>
+                <div class="rollno-part">
+                    <span class="rollno-number">R52</span>
+                    <span class="rollno-label">Your RMU batch</span>
+                </div>
+                <div class="rollno-separator">-</div>
+                <div class="rollno-part">
+                    <span class="rollno-number">B</span>
+                    <span class="rollno-label">Sub-batch (A, B, etc.)</span>
+                </div>
+            </div>
+            <p class="rollno-guide-note">Example: Abdul Haseeb Ahmad would have 123-R52-B</p>
+        </div>
+        <div class="rollno-guide-actions">
+            <button id="rollno-guide-ok" class="rollno-guide-btn">OK, Got it!</button>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Roll Number Guide Popup Styles */
+.rollno-guide-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:10002;padding:20px;box-sizing:border-box}
+.rollno-guide-modal{width:min(480px,95vw);max-height:90vh;background:#fff;border-radius:16px;border:2px solid #d4b071;box-shadow:0 20px 60px -12px rgba(110,28,23,.35);overflow-y:auto}
+.rollno-guide-header{background:linear-gradient(135deg,#6e1c17,#55120f);color:#fff;padding:20px 24px;border-radius:14px 14px 0 0;text-align:center}
+.rollno-guide-icon{font-size:32px;margin-bottom:8px}
+.rollno-guide-title{font:700 20px Inter,system-ui,sans-serif;margin:0;letter-spacing:-0.3px}
+.rollno-guide-content{padding:24px}
+.rollno-guide-desc{font:14px/1.5 Inter,system-ui,sans-serif;color:#5d4037;margin:0 0 20px;text-align:center}
+.rollno-format-example{background:#f8f4f0;border:2px solid #d4b071;border-radius:12px;padding:16px;text-align:center;margin-bottom:20px}
+.rollno-format-text{font:700 24px 'Courier New',monospace;color:#6e1c17;letter-spacing:2px}
+.rollno-guide-breakdown{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.rollno-part{display:flex;flex-direction:column;align-items:center;min-width:70px}
+.rollno-number{font:600 18px 'Courier New',monospace;color:#6e1c17;background:#fef7f0;border:1px solid #d4b071;border-radius:8px;padding:8px 12px;margin-bottom:6px}
+.rollno-label{font:11px Inter,system-ui,sans-serif;color:#8b4513;text-align:center;line-height:1.3}
+.rollno-separator{font:700 20px Inter,system-ui,sans-serif;color:#d4b071;margin:0 4px}
+.rollno-guide-note{font:12px/1.4 Inter,system-ui,sans-serif;color:#8b4513;text-align:center;background:#fff8f0;border:1px solid #f0e6d2;border-radius:8px;padding:12px;margin:0}
+.rollno-guide-actions{padding:20px 24px;text-align:center;border-top:1px solid #f0e6d2}
+.rollno-guide-btn{appearance:none;border:0;border-radius:10px;padding:12px 28px;font:600 14px Inter,system-ui,sans-serif;background:linear-gradient(135deg,#6e1c17,#55120f);color:#fff;cursor:pointer;transition:all 0.3s ease;box-shadow:0 4px 12px -4px rgba(110,28,23,.4)}
+.rollno-guide-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px -4px rgba(110,28,23,.5)}
+.rollno-guide-btn:active{transform:translateY(0)}
+
+/* Mobile responsive adjustments */
+@media (max-width: 600px) {
+  .rollno-guide-modal{width:95vw;margin:10px}
+  .rollno-guide-breakdown{flex-direction:column;gap:12px}
+  .rollno-format-text{font-size:20px;letter-spacing:1px}
+  .rollno-number{font-size:16px;padding:6px 10px}
+  .rollno-separator{transform:rotate(90deg);margin:8px 0}
+}
+</style>
+
+<script>
+// Roll Number Validation System for Portfolio
+(function() {
+    'use strict';
+    
+    console.log('[RollNo] Initializing roll number validation system');
+    
+    // Roll number format validation (function already defined globally above)
+    
+    // Show roll number format guide popup
+    function showRollNoGuide() {
+        console.log('[RollNo] Showing guidance popup for invalid format');
+        const overlay = document.getElementById('rollno-guide-overlay');
+        if(overlay) {
+            overlay.style.display = 'flex';
+            // Add slight delay for smooth animation
+            setTimeout(() => overlay.classList.add('show'), 10);
+            console.log('[RollNo] Popup displayed successfully');
+        } else {
+            console.error('[RollNo] Popup overlay element not found!');
+        }
     }
     
-    // Test backend after a short delay
-    setTimeout(testBackend, 2000);
+    // Hide roll number format guide popup
+    function hideRollNoGuide() {
+        console.log('[RollNo] Hiding guidance popup');
+        const overlay = document.getElementById('rollno-guide-overlay');
+        if(overlay) {
+            overlay.classList.remove('show');
+            setTimeout(() => overlay.style.display = 'none', 200);
+        }
+    }
     
-    // Function already defined at the top of the file to avoid undefined errors
+    // Initialize popup event handlers when DOM is ready
+    function initializePopup() {
+        console.log('[RollNo] Setting up popup event handlers');
+        
+        const okBtn = document.getElementById('rollno-guide-ok');
+        if(okBtn) {
+            okBtn.addEventListener('click', function() {
+                console.log('[RollNo] OK button clicked');
+                hideRollNoGuide();
+            });
+        } else {
+            console.error('[RollNo] OK button not found');
+        }
+        
+        // Close popup when clicking outside
+        const overlay = document.getElementById('rollno-guide-overlay');
+        if(overlay) {
+            overlay.addEventListener('click', function(e) {
+                if(e.target === overlay) {
+                    console.log('[RollNo] Clicked outside popup, closing');
+                    hideRollNoGuide();
+                }
+            });
+        }
+    }
     
-    // Expose for debugging
-    window.portfolioSystem = { 
-      isAdminMode, 
-      isSignedIn, 
-      currentUserEmail,
-      loadAdminPortfolios, 
-      enableAdminMode, 
-      disableAdminMode, 
-      testBackend, 
-      generateFilesIndex: window.generateFilesIndex,
-      signInFromWelcome,
-      continueWithoutSignIn,
-      loadDefaultPortfolio
+    // Export functions for use by portfolio.js
+    window.rollNoValidator = {
+        isValid: isValidRollNoFormat,
+        showGuide: showRollNoGuide,
+        hideGuide: hideRollNoGuide
     };
-  })();
-  </script>
+    
+    console.log('[RollNo] Roll number validator initialized:', window.rollNoValidator);
+    
+    // Test validation function
+    console.log('[RollNo] Testing validator with valid format 123-R52-B:', window.rollNoValidator.isValid('123-R52-B'));
+    console.log('[RollNo] Testing validator with invalid format 123:', window.rollNoValidator.isValid('123'));
+    
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializePopup);
+    } else {
+        initializePopup();
+    }
+    
+})();
+</script>
 
 </body>
 </html>
