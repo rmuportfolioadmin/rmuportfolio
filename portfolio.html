@@ -1156,6 +1156,27 @@ function initializeGisAndGapi() {
                         sessionStorage.setItem('isUserMode', 'true');
                     } catch (e) { console.warn('[GIS] Could not persist token', e); }
 
+                                        // If we don't already have an ID token (JWT), try to request one via GSI.
+                                        try {
+                                            const existingId = sessionStorage.getItem('idToken');
+                                            if (!existingId && window.google && google.accounts && google.accounts.id) {
+                                                try {
+                                                    // Initialize the ID token flow (safe to call multiple times)
+                                                    google.accounts.id.initialize({
+                                                        client_id: CLIENT_ID,
+                                                        callback: (resp) => {
+                                                            if (resp && resp.credential) {
+                                                                try { sessionStorage.setItem('idToken', resp.credential); } catch(_){}
+                                                                console.log('[GIS] Received ID token via prompt (stored idToken preview).');
+                                                            }
+                                                        }
+                                                    });
+                                                    // Prompt (may be silent if already approved)
+                                                    google.accounts.id.prompt();
+                                                } catch(_err) { console.debug('[GIS] id prompt attempt failed:', _err && _err.message); }
+                                            }
+                                        } catch(_) {}
+
                     // Attempt auto-load (user mode only)
                     try {
                         if (window.__VIEW_MODE !== 'admin' && window.app && typeof window.app.loadFromDrive === 'function') {
