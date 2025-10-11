@@ -428,10 +428,13 @@
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
+          // Prefer idToken if available in sessionStorage
+          const idTok = sessionStorage.getItem('idToken');
+          const authToken = (idTok && idTok.startsWith('eyJ')) ? idTok : token;
           const response = await fetch(`${backendBase}/api/generate-manifest`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${token}`,
+              'Authorization': `Bearer ${authToken}`,
               'Content-Type': 'application/json'
             },
             credentials: 'omit',
@@ -492,10 +495,12 @@
             const timeout = setTimeout(() => controller.abort(), config.API_TIMEOUT || 20000);
 
             const t0_list = performance.now();
+            const idTok = sessionStorage.getItem('idToken');
+            const authToken = (idTok && idTok.startsWith('eyJ')) ? idTok : adminToken;
             const response = await fetch(`${backendBase}/api/list`, {
               method: 'GET',
               headers: {
-                'Authorization': `Bearer ${adminToken}`,
+                'Authorization': `Bearer ${authToken}`,
                 'Content-Type': 'application/json'
               },
               credentials: 'omit',
@@ -1008,8 +1013,14 @@
           
           // Store user data for the portfolio page
           try {
+            // Persist portfolio + auth context. If the token looks like a JWT ID token
+            // (starts with 'eyJ') persist it as idToken as well so backend receives
+            // the JWT when possible.
             sessionStorage.setItem('userPortfolioData', JSON.stringify(portfolioData));
             sessionStorage.setItem('userEmail', email);
+            if (token && typeof token === 'string' && token.startsWith('eyJ')) {
+              sessionStorage.setItem('idToken', token);
+            }
             sessionStorage.setItem('userToken', token);
             sessionStorage.setItem('isUserMode', 'true');
           } catch(e) {
@@ -1024,7 +1035,12 @@
           
           // Store user credentials for portfolio page to enable Drive features
           try {
+            // Persist credentials for returning to portfolio page. Prefer to store
+            // an ID token separately when the token param is a JWT.
             sessionStorage.setItem('userEmail', email);
+            if (token && typeof token === 'string' && token.startsWith('eyJ')) {
+              sessionStorage.setItem('idToken', token);
+            }
             sessionStorage.setItem('userToken', token);
             sessionStorage.setItem('isUserMode', 'true');
           } catch(e) {
