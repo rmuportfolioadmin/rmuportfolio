@@ -312,7 +312,11 @@
         // Use the modernized auth system with fallback
         try {
           const authResult = await window.RMU_AUTH.authenticateUser();
-          
+
+          // Hide welcome modal immediately after a successful interactive sign-in
+          try { showWelcomeOverlay(false); } catch(_) {}
+          try { blurPortfolio(false); } catch(_) {}
+
           adminToken = authResult.token;
           currentUserEmail = authResult.email;
           isSignedIn = true;
@@ -1092,36 +1096,47 @@
         }
       } catch(_) {}
 
-      // Check if already signed in
-      if(window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
+      // Check if already signed in. If we detect an email, hide the welcome
+      // overlay immediately (prevents the welcome loop) and then attempt to
+      // obtain an ID token silently. Proceed to admin/user flows when possible.
+      if (window.RMU_AUTH && RMU_AUTH.getCurrentUserEmail()) {
         const email = RMU_AUTH.getCurrentUserEmail();
         console.log('[Portfolio] Already signed in as:', email);
-        
-        if(email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-          // Admin is already signed in
+        // Mark signed-in and hide the welcome UI right away to avoid trapping the user
+        currentUserEmail = email;
+        isSignedIn = true;
+        try { showWelcomeOverlay(false); } catch(_) {}
+        try { blurPortfolio(false); } catch(_) {}
+
+        // Continue to obtain an ID token silently; if obtained we'll complete admin/user init.
+        try {
           RMU_AUTH.getIdToken().then(token => {
-            if(token) {
+            if (token) {
               adminToken = token;
-              currentUserEmail = email;
-              isSignedIn = true;
-              showWelcomeOverlay(false);
-              blurPortfolio(false);
-              enableAdminMode();
+              if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+                // admin
+                enableAdminMode();
+              } else {
+                // regular user
+                hideGalleryNavigation(true);
+                loadUserPortfolioFromDrive(email, token);
+              }
+            } else {
+              // No id token; keep the UI hidden and allow the user to continue or trigger interactive sign-in later
+              console.log('[Portfolio] No ID token available silently despite signed-in user. Interactive sign-in may be required for full Drive access.');
+              if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+                hideGalleryNavigation(true);
+              }
             }
-          }).catch(console.error);
-        } else {
-          // Regular user is already signed in
-          RMU_AUTH.getIdToken().then(token => {
-            if(token) {
-              adminToken = token;
-              currentUserEmail = email;
-              isSignedIn = true;
-              showWelcomeOverlay(false);
-              blurPortfolio(false);
+          }).catch(e => {
+            console.warn('[Portfolio] Silent getIdToken failed:', e);
+            // keep welcome hidden, user can interact with sign-in button if needed
+            if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
               hideGalleryNavigation(true);
-              loadUserPortfolioFromDrive(email, token);
             }
-          }).catch(console.error);
+          });
+        } catch (e) {
+          console.warn('[Portfolio] getIdToken invocation failed:', e);
         }
       }
     }
