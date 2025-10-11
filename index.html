@@ -874,15 +874,21 @@
             let messagesSent = 0;
             let messagingActive = true;
             
-            const sendData = () => {
+                const sendData = () => {
               try {
                 if(!messagingActive) return;
+                // Include a hideWelcome flag so the child can immediately hide any
+                // welcome/auth overlays before processing the admin data.
                 portfolioWindow.postMessage({
                   type: 'admin-portfolio-data',
                   data: portfolioData,
                   filename: portfolio.file,
-                  source: 'remote'
+                  source: 'remote',
+                  hideWelcome: true
                 }, '*');
+                // Also send a lightweight explicit hide message to ensure fast handling
+                // in environments where the larger object may be delayed.
+                try { portfolioWindow.postMessage({ type: 'hide-welcome' }, '*'); } catch(_) {}
                 messagesSent++;
                 console.log(`[Admin] Portfolio data sent to new window (attempt ${messagesSent})`);
               } catch(err) {
