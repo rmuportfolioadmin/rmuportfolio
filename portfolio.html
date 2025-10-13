@@ -1247,7 +1247,9 @@ function initializeGisAndGapi() {
 
                 if (window.__VIEW_MODE !== 'admin' && isUserMode === 'true' && existingUserToken) {
                     console.log('[Auth] User mode detected with existing token');
-                    accessToken = existingUserToken;
+                    // Re-read sessionStorage in case token was set during init flow
+                    const storedToken = sessionStorage.getItem('userToken') || existingUserToken;
+                    accessToken = storedToken;
                     if (typeof gapi.client.setToken === 'function') {
                         gapi.client.setToken({ access_token: accessToken });
                         console.log('[Auth] User token from sessionStorage set on gapi.client');
@@ -1626,16 +1628,37 @@ window.addEventListener('load', () => {
                                 throw new Error('Unable to obtain authentication token');
                         }
 
-            const response = await fetch(base + '/api/save', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ' + bearerToken
-                },
-                body: JSON.stringify(payload),
-                credentials: 'omit',
-                cache: 'no-store'
-            });
+            // Build headers; prefer sending a JWT ID token separately when available
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + bearerToken
+            };
+            try { const idTok = sessionStorage.getItem('idToken'); if (idTok) headers['X-Id-Token'] = idTok; } catch(_) {}
+
+            // Retry once on network aborts (fetch may be aborted by browser/extensions)
+            let response = null;
+            let attempts = 0;
+            const maxAttempts = 2;
+            while (attempts < maxAttempts) {
+                attempts++;
+                try {
+                    response = await fetch(base + '/api/save', {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify(payload),
+                        credentials: 'omit',
+                        cache: 'no-store'
+                    });
+                    break; // success (or at least a non-network throw)
+                } catch (e) {
+                    // Retry only on network-level failures (AbortError / ERR_ABORTED)
+                    if (e && e.name === 'AbortError' && attempts < maxAttempts) {
+                        await new Promise(r => setTimeout(r, 700));
+                        continue;
+                    }
+                    throw e;
+                }
+            }
             
             if(!response.ok) {
                 const errorText = await response.text().catch(() => response.statusText);
