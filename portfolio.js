@@ -3153,30 +3153,28 @@ PortfolioApp.prototype.exportPortfolioJson = function(customName) {
     console.log('[Portfolio] 📝 Generating JSON filename using standardized format');
     
     let filename;
+    let base = '';
     if (customName && String(customName).trim()) {
       // If explicit custom name provided, use it (for legacy compatibility)
       console.log('[Portfolio] Using custom name:', customName);
-      let base = String(customName).trim()
-                  .replace(/["'""'']+/g, '')
-                  .replace(/[^A-Za-z0-9]+/g, '-')
-                  .replace(/^-+|-+$/g, '')
-                  .toLowerCase();
-      if (!base) base = 'portfolio-data';
-      if (base.length > 80) base = base.slice(0, 80);
-      filename = base + '.json';
+      base = String(customName).trim();
     } else {
       // Use standardized filename based on student name and roll number
       console.log('[Portfolio] Generating standardized JSON filename');
       filename = this.generateStandardFilename('json', 'portfolio-data');
+      // derive base from generated filename (strip .json)
+      base = String(filename || 'portfolio-data').replace(/\.json$/i, '');
     }
 
     // Sanitize for filename: remove apostrophes/quotes, replace non-alphanumerics with dashes, collapse dashes
-    base = base.replace(/["'“”‘’]+/g, '')
+    base = String(base || '').replace(/["'“”‘’]+/g, '')
                .replace(/[^A-Za-z0-9]+/g, '-')
                .replace(/^-+|-+$/g, '')
                .toLowerCase();
     if (!base) base = 'portfolio-data';
     // Limit length to avoid OS path issues
+    if (base.length > 80) base = base.slice(0, 80);
+    filename = base + '.json';
 
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
