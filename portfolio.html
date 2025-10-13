@@ -1429,9 +1429,23 @@ window.addEventListener('load', () => {
         if(authOverlay) authOverlay.style.display = show ? 'flex' : 'none';
     }
     
-    function showSaveModal(show, msg) {
-        if(saveModal) saveModal.style.display = show ? 'flex' : 'none';
-        if(saveStatus && msg) saveStatus.textContent = msg;
+    // Small UX change: delay showing the full-screen blocking save modal by a short
+    // timeout so the browser's account chooser dialog (or gapi account picker)
+    // can appear and be interacted with before the page blur blocks input.
+    // We still show the auth overlay immediately when sign-in is required.
+    let _saveModalTimer = null;
+    function showSaveModal(show, msg, options = { immediate: false }) {
+        if (_saveModalTimer) { clearTimeout(_saveModalTimer); _saveModalTimer = null; }
+        if (saveStatus && msg) saveStatus.textContent = msg;
+        // If immediate:true is requested, show modal right away (used when operation truly needs blocking)
+        if (show && !options.immediate) {
+            // Delay a short while to allow account-selection UI to appear (700ms is generous but quick)
+            _saveModalTimer = setTimeout(() => {
+                if (saveModal) saveModal.style.display = 'flex';
+            }, 700);
+        } else {
+            if (saveModal) saveModal.style.display = show ? 'flex' : 'none';
+        }
     }
     
     function setAuthError(msg) {
@@ -1448,7 +1462,9 @@ window.addEventListener('load', () => {
                 return;
             }
             
-            showAuthOverlay(false);
+            // Keep the auth overlay visible while the browser/account chooser is active
+            // so the user can select an account. Delay showing the blocking save modal.
+            // showAuthOverlay(false);
             showSaveModal(true, 'Signing in...');
             
             // Initialize gapi.auth2 if needed
@@ -1470,7 +1486,7 @@ window.addEventListener('load', () => {
             
         } catch(err) {
             console.error('Sign-in error:', err);
-            showSaveModal(false);
+            showSaveModal(false, null, { immediate: true });
             setAuthError('Sign-in failed: ' + (err.message || err));
             showAuthOverlay(true);
         }
@@ -1668,7 +1684,7 @@ window.addEventListener('load', () => {
             const result = await response.json().catch(() => ({success: false}));
             
             if(result && result.success) {
-                showSaveModal(true, 'Portfolio saved successfully!' + (result.fileId ? ` (ID: ${result.fileId})` : ''));
+                showSaveModal(true, 'Portfolio saved successfully!' + (result.fileId ? ` (ID: ${result.fileId})` : ''), { immediate: true });
                 saveCancel.style.display = 'inline-block';
                 saveCancel.onclick = () => showSaveModal(false);
             } else {
@@ -1677,7 +1693,7 @@ window.addEventListener('load', () => {
             
         } catch(err) {
             console.error('Save error:', err);
-            showSaveModal(true, 'Save failed: ' + (err.message || err));
+            showSaveModal(true, 'Save failed: ' + (err.message || err), { immediate: true });
             saveCancel.style.display = 'inline-block';
             saveCancel.onclick = () => showSaveModal(false);
         }
