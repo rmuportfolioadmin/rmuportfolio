@@ -1376,7 +1376,12 @@ window.addEventListener('load', () => {
 
 <!-- Authentication Modal Overlays -->
 <style>
-    .auth-overlay{position:fixed;inset:0;background:rgba(10,20,40,.55);backdrop-filter:saturate(1.1) blur(3px);display:none;align-items:center;justify-content:center;z-index:10000}
+     /* By default the auth overlay shows only the modal box without a full-screen backdrop
+         so browser account chooser dialogs are not obscured. The 'blocking' class adds the
+         backdrop/blur when we want to prevent interaction with the page (e.g., during save). */
+    .auth-overlay{position:fixed;inset:0;background:transparent;display:none;align-items:center;justify-content:center;z-index:10000;pointer-events:none}
+    .auth-overlay .auth-modal{pointer-events:auto /* allow interacting with the modal itself even when overlay is non-blocking */}
+    .auth-overlay.blocking{background:rgba(10,20,40,.55);backdrop-filter:saturate(1.1) blur(3px);pointer-events:auto}
     .auth-modal{width:min(520px,92vw);background:#fff;border-radius:16px;border:1px solid #d8e0ea;box-shadow:0 24px 64px -16px rgba(16,40,80,.35);padding:22px}
     .auth-title{font:600 18px Inter,system-ui,sans-serif;color:#0b2340;margin:4px 0 12px}
     .auth-desc{font:13px/1.45 Inter,system-ui,sans-serif;color:#3a4b61;margin-bottom:16px}
@@ -1425,8 +1430,16 @@ window.addEventListener('load', () => {
     const saveStatus = document.getElementById('save-server-status');
     const saveCancel = document.getElementById('save-server-cancel');
     
-    function showAuthOverlay(show) {
-        if(authOverlay) authOverlay.style.display = show ? 'flex' : 'none';
+    function showAuthOverlay(show, options = { blocking: false }) {
+        if (!authOverlay) return;
+        if (show) {
+            authOverlay.style.display = 'flex';
+            if (options.blocking) authOverlay.classList.add('blocking');
+            else authOverlay.classList.remove('blocking');
+        } else {
+            authOverlay.style.display = 'none';
+            authOverlay.classList.remove('blocking');
+        }
     }
     
     // Small UX change: delay showing the full-screen blocking save modal by a short
@@ -1442,9 +1455,14 @@ window.addEventListener('load', () => {
             // Delay a short while to allow account-selection UI to appear (700ms is generous but quick)
             _saveModalTimer = setTimeout(() => {
                 if (saveModal) saveModal.style.display = 'flex';
+                // Ensure blocking backdrop is applied once the modal is shown after delay
+                if (saveModal && authOverlay) authOverlay.classList.add('blocking');
             }, 700);
         } else {
             if (saveModal) saveModal.style.display = show ? 'flex' : 'none';
+            if (!show && authOverlay) authOverlay.classList.remove('blocking');
+            // If showing immediately, also apply blocking backdrop
+            if (show && options.immediate && authOverlay) authOverlay.classList.add('blocking');
         }
     }
     
@@ -1463,9 +1481,9 @@ window.addEventListener('load', () => {
             }
             
             // Keep the auth overlay visible while the browser/account chooser is active
-            // so the user can select an account. Delay showing the blocking save modal.
+            // so the user can select an account. Do not show the blocking save modal
+            // until after sign-in completes so the account chooser is not obscured.
             // showAuthOverlay(false);
-            showSaveModal(true, 'Signing in...');
             
             // Initialize gapi.auth2 if needed
             await new Promise(resolve => gapi.load('auth2', resolve));
