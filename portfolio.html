@@ -1150,37 +1150,24 @@ function initializeGisAndGapi() {
             try { document.getElementById('authorize_button').style.display = 'none'; } catch (e) { }
         } else {
             // Create the GIS token client for user interactive sign-in
-
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
                 callback: async (tokenResponse) => {
-                    if (tokenResponse.error) {
-                        console.error('Token error', tokenResponse);
-                        return;
+                        if (tokenResponse.error) {
+                            console.error('Token error', tokenResponse);
+                            return;
+                        }
+                        accessToken = tokenResponse.access_token;
+                    // Apply token to gapi.client if ready
+                    if (window.gapi && gapi.client && typeof gapi.client.setToken === 'function') {
+                        gapi.client.setToken({ access_token: accessToken });
+                        console.log('[GIS] Access token set on gapi.client');
+                    } else {
+                        console.warn('[GIS] gapi.client not ready when token received');
                     }
-                    accessToken = tokenResponse.access_token;
-                    // --- CACHE BUSTER: Clear all localStorage and in-memory app data on user sign-in (non-admin) ---
-                    if (window.__VIEW_MODE !== 'admin') {
-                        try {
-                            // Clear all localStorage and sessionStorage except auth tokens
-                            localStorage.clear();
-                            // Optionally preserve sessionStorage tokens if needed, but clear user data
-                            const idToken = sessionStorage.getItem('idToken');
-                            sessionStorage.clear();
-                            if (idToken) sessionStorage.setItem('idToken', idToken);
-                            // Clear in-memory app data if app is already initialized
-                            if (window.app) {
-                                if (typeof window.app.achievements !== 'undefined') window.app.achievements = [];
-                                if (typeof window.app.reflections !== 'undefined') window.app.reflections = [];
-                                if (typeof window.app.loadPersonalInfo === 'function') window.app.loadPersonalInfo();
-                                if (typeof window.app.renderAchievements === 'function') window.app.renderAchievements();
-                                if (typeof window.app.renderReflections === 'function') window.app.renderReflections();
-                                if (typeof window.app.updateLinkedAchievements === 'function') window.app.updateLinkedAchievements();
-                            }
-                        } catch (e) { console.warn('[CacheBuster] Error clearing cache on user sign-in:', e); }
-                        updateAuthUIStateGIS(true);
-                    }
+
+                    if (window.__VIEW_MODE !== 'admin') updateAuthUIStateGIS(true);
                     try {
                         // If the access token happens to be an ID token (JWT) store it
                         // explicitly as idToken as well to prioritize JWT usage server-side.
@@ -1191,26 +1178,26 @@ function initializeGisAndGapi() {
                         sessionStorage.setItem('isUserMode', 'true');
                     } catch (e) { console.warn('[GIS] Could not persist token', e); }
 
-                    // If we don't already have an ID token (JWT), try to request one via GSI.
-                    try {
-                        const existingId = sessionStorage.getItem('idToken');
-                        if (!existingId && window.google && google.accounts && google.accounts.id) {
-                            try {
-                                // Initialize the ID token flow (safe to call multiple times)
-                                google.accounts.id.initialize({
-                                    client_id: CLIENT_ID,
-                                    callback: (resp) => {
-                                        if (resp && resp.credential) {
-                                            try { sessionStorage.setItem('idToken', resp.credential); } catch(_){}
-                                            console.log('[GIS] Received ID token via prompt (stored idToken preview).');
-                                        }
-                                    }
-                                });
-                                // Prompt (may be silent if already approved)
-                                google.accounts.id.prompt();
-                            } catch(_err) { console.debug('[GIS] id prompt attempt failed:', _err && _err.message); }
-                        }
-                    } catch(_) {}
+                                        // If we don't already have an ID token (JWT), try to request one via GSI.
+                                        try {
+                                            const existingId = sessionStorage.getItem('idToken');
+                                            if (!existingId && window.google && google.accounts && google.accounts.id) {
+                                                try {
+                                                    // Initialize the ID token flow (safe to call multiple times)
+                                                    google.accounts.id.initialize({
+                                                        client_id: CLIENT_ID,
+                                                        callback: (resp) => {
+                                                            if (resp && resp.credential) {
+                                                                try { sessionStorage.setItem('idToken', resp.credential); } catch(_){}
+                                                                console.log('[GIS] Received ID token via prompt (stored idToken preview).');
+                                                            }
+                                                        }
+                                                    });
+                                                    // Prompt (may be silent if already approved)
+                                                    google.accounts.id.prompt();
+                                                } catch(_err) { console.debug('[GIS] id prompt attempt failed:', _err && _err.message); }
+                                            }
+                                        } catch(_) {}
 
                     // Attempt auto-load (user mode only)
                     try {
